@@ -958,7 +958,7 @@ def print_help():
     t.add_row("ci run [имя.yml]", "Запустить workflow (по умолчанию первый)")
     t.add_row("ci logs last", "Показать логи последнего запуска workflow")
     t.add_row("ci init <tpl> [--auto|--as <file.yml>] [--force]", "Создать workflow (по умолчанию .github/workflows/ci.yml)")
-    .add_row("  tpl ∈ " + ", ".join(sorted(TEMPLATES.keys())), "Доступные шаблоны")
+    t.add_row("  tpl ∈ " + ", ".join(sorted(TEMPLATES.keys())), "Доступные шаблоны")
 
 
 
