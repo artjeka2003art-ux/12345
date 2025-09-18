@@ -2,7 +2,9 @@ from __future__ import annotations
 import subprocess
 from rich.panel import Panel
 from rich.console import Console
-
+import os
+from pathlib import Path
+from rich.panel import Panel
 console = Console()
 
 def _run(cmd: list[str]) -> tuple[int, str, str]:
