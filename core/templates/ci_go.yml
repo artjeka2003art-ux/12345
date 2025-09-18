@@ -1,0 +1,17 @@
+---  # CI шаблон для Go проекта
+name: ci_go
+steps:
+  - name: setup
+    run: |
+      go mod tidy
+    target: auto
+
+  - name: build
+    run: go build ./...
+    target: auto
+    needs: [setup]
+
+  - name: test
+    run: go test ./...
+    target: auto
+    needs: [build]

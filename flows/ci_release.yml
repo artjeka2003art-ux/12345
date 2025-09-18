@@ -1,0 +1,72 @@
+name: ci_release
+
+# можешь хранить, например, SLACK_WEBHOOK тут, если хочешь
+# env:
+#   SLACK_WEBHOOK: "${{ secrets.SLACK_WEBHOOK }}"
+
+# secrets_from: "~/.ghostcmd/secrets.yml"
+
+steps:
+  - name: setup
+    run: |
+      set -x
+      python3 --version
+      pip3 --version
+    target: auto
+
+  - name: build
+    needs: [setup]
+    run: |
+      echo "VERSION=v1.9.3-14-gabc1234" | tee
+    target: auto
+    capture:
+      VERSION:
+        regex: 'VERSION=([^\r\n]+)'
+
+  # флейки: упадёт два раза, на третьей попытке — успех
+  - name: test
+    needs: [build]
+    run: |
+      set -x
+      echo "pytest -q (симуляция)"
+      cnt_file=".ghost_ci_test_count"
+      cnt=$(test -f "$cnt_file" && cat "$cnt_file" || echo 0)
+      cnt=$((cnt+1))
+      echo "$cnt" > "$cnt_file"
+      if [ "$cnt" -lt 3 ]; then
+        exit 1
+      fi
+      echo "OK on attempt $cnt"
+    retries:
+      max: 2
+      delay: 2s
+      backoff: 2.0
+    target: auto
+
+  - name: docker_build
+    needs: [test]
+    run: |
+      echo "IMAGE=ghcr.io/me/ghostcmd:${{ steps.build.outputs.VERSION }}"
+    capture:
+      IMAGE:
+        regex: 'IMAGE=([^\r\n]+)'
+    target: docker
+
+  - name: login
+    needs: [docker_build]
+    run: |
+      echo "docker login ghcr.io (mock)"
+    target: docker
+
+  - name: push
+    needs: [login]
+    run: |
+      echo "docker push ${{ steps.docker_build.outputs.IMAGE }} (mock)"
+    target: docker
+
+  - name: announce
+    needs: [push]
+    if: '[ -n "$SHOULD_ANNOUNCE" ]'   # <-- реальный env, а не env.*
+    run: |
+      echo "curl -X POST ... (mock) for ${{ steps.docker_build.outputs.IMAGE }}"
+    target: auto

@@ -1,0 +1,242 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>GhostOverlay HUD</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root { --bg:#0b0b0f; --panel:#111318; --line:#1f2430; --muted:#9aa4b2; }
+    body {
+      margin: 0; padding: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      color: #e5e7eb;
+      background: transparent;
+    }
+    .card {
+      background: rgba(15,15,20,0.92);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      width: 440px;
+    }
+    .header {
+      -webkit-app-region: drag;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--line);
+      border-top-left-radius: 12px; border-top-right-radius: 12px;
+      background: #0f1117;
+    }
+    .title { font-size: 14px; font-weight: 600; color: #f9fafb; }
+    .icon-btn {
+      -webkit-app-region: no-drag;
+      background: transparent; border: none;
+      color: #9ca3af; cursor: pointer; padding: 4px; font-size: 16px;
+    }
+    .icon-btn:hover { color: #f87171; }
+
+    .content { padding: 12px 16px 14px; }
+    .command {
+      background: #0a0c12;
+      border: 1px solid #1a1f2b;
+      padding: 8px; border-radius: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 13px;
+    }
+
+    .buttons { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+    button.action {
+      -webkit-app-region: no-drag;
+      background: #2563eb;
+      border: none; border-radius: 8px;
+      padding: 6px 12px; color: white; font-size: 13px; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    button.action:hover { background: #1e40af; }
+
+    #ai-query {
+      margin-top: 8px;
+      width: 100%;
+      padding: 6px;
+      font-size: 14px;
+      border-radius: 8px;
+      border: 1px solid #1f2430;
+      background: #0a0c12;
+      color: #e5e7eb;
+    }
+
+    .explain-box {
+      margin-top: 12px; padding: 10px;
+      border-radius: 8px; background: #1e293b;
+      font-size: 13px; display: none; white-space: pre-wrap;
+    }
+    .explain-box.show { display: block; }
+
+    .meta {
+      color: var(--muted);
+      font-size: 12px; margin-top: 10px;
+    }
+  </style>
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <div class="card" id="tipCard">
+    <div class="header">
+      <div class="title">Жду подсказку…</div>
+      <button id="closeBtn" class="icon-btn" title="Закрыть">✕</button>
+    </div>
+
+    <div class="content">
+      <div class="command" id="cmd">-</div>
+
+      <div class="buttons">
+        <button id="copy" class="action">
+          <i data-lucide="copy"></i> Copy
+        </button>
+        <button id="run" class="action">
+          <i data-lucide="play"></i> Run
+        </button>
+        <button id="ask" class="action">
+          <i data-lucide="messages-square"></i> Ask AI
+        </button>
+        <button id="explain" class="action">
+          <i data-lucide="book-open"></i> Explain
+        </button>
+      </div>
+
+      <input id="ai-query" type="text" placeholder="Спроси ИИ (например: 'как поставить wget?')" />
+
+      <div class="explain-box" id="explainBox"></div>
+      <div class="meta" id="meta">—</div>
+    </div>
+  </div>
+
+  <script>
+    lucide.createIcons();
+
+    const titleEl = document.querySelector(".title");
+    const cmdEl   = document.getElementById("cmd");
+    const explainBox = document.getElementById("explainBox");
+    const metaEl  = document.getElementById("meta");
+
+    let currentExplain = "Нет пояснения.";
+    let lastUpdate = null;
+
+    // state для переключения между ИИ-подсказкой и живыми командами
+    let pinTipUntil = 0;        // timestamp (ms) — пока «прибита» подсказка ИИ
+    let prevLastCmd = null;     // последняя показанная команда из терминала
+
+    function showTip(tip) {
+      titleEl.textContent = tip.title || "Подсказка";
+      cmdEl.textContent   = tip.command || "-";
+      currentExplain      = tip.explain_long || tip.explain || "Нет пояснения.";
+      explainBox.classList.remove("show");
+    }
+
+    function showTerminal(u, ts) {
+      titleEl.textContent = "Команда из терминала";
+      cmdEl.textContent   = u.last_cmd || "-";
+      currentExplain      = u.stderr
+        ? `Ошибка: ${u.stderr.trim()}`
+        : `Команда выполнена (exit=${u.exit_code ?? "-"})`;
+      explainBox.classList.remove("show");
+    }
+
+    // SSE
+    const es = new EventSource("http://127.0.0.1:8765/stream");
+    es.addEventListener("tip", (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        const tip  = data.tip || {};
+        const u    = data.update || {};
+        const now  = Date.now();
+
+        // сохраняем апдейт
+        lastUpdate = u || lastUpdate;
+        metaEl.textContent = `[${data.ts || ""}] ${u.cwd || ""}  $ ${u.last_cmd || ""}  (exit=${u.exit_code ?? "-"})`;
+
+        const hasNewCmd = u && u.last_cmd && u.last_cmd !== prevLastCmd;
+
+        // логика отображения:
+        // 1) если пришла новая команда — показываем её
+        if (hasNewCmd) {
+          showTerminal(u, data.ts);
+          prevLastCmd = u.last_cmd;
+          return;
+        }
+
+        // 2) если подсказка ИИ «прибита» по времени — продолжаем показывать её
+        if (now < pinTipUntil && (tip.title || tip.command)) {
+          showTip(tip);
+          return;
+        }
+
+        // 3) иначе — показываем подсказку, если она есть; если пустая — оставляем как есть
+        if (tip.title || tip.command) {
+          showTip(tip);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    });
+    es.onerror = (e) => console.error("SSE error", e);
+
+    // Кнопки
+    document.getElementById("copy").onclick = () => {
+      navigator.clipboard.writeText(cmdEl.textContent || "");
+    };
+
+    document.getElementById("run").onclick = () => {
+      fetch("http://127.0.0.1:8765/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: cmdEl.textContent || "" })
+      }).catch(console.error);
+    };
+
+    // Ask AI — без лишних /update: сервер сам пушит tip по /brain
+    document.getElementById("ask").onclick = async () => {
+      const input = document.getElementById("ai-query");
+      const q = (input.value || "").trim();
+      if (!q) {
+        alert("Введи запрос в поле под кнопками.");
+        return;
+      }
+      try {
+        const res = await fetch("http://127.0.0.1:8765/brain", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: q, context: lastUpdate })
+        });
+        const data = await res.json();
+        if (data && data.tip) {
+          // локально покажем сразу
+          showTip(data.tip);
+          // «прибить» подсказку ИИ на 4 секунды, потом снова показывать живые команды
+          pinTipUntil = Date.now() + 4000;
+          lucide.createIcons();
+        } else {
+          alert("ИИ не дал ответа: " + JSON.stringify(data));
+        }
+      } catch (e) {
+        console.error(e);
+        alert("Ошибка при запросе к ИИ: " + e);
+      }
+    };
+
+    document.getElementById("explain").onclick = () => {
+      if (!explainBox.classList.contains("show")) {
+        explainBox.textContent = currentExplain;
+        explainBox.classList.add("show");
+      } else {
+        explainBox.classList.remove("show");
+      }
+    };
+
+    document.getElementById("closeBtn").onclick = () => {
+      window.close();
+    };
+  </script>
+</body>
+</html>

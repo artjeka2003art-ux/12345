@@ -1,0 +1,26 @@
+---  # CI шаблон для Python проекта
+name: ci_python
+steps:
+  - name: setup
+    run: |
+      python3 -m venv venv
+      source venv/bin/activate
+      pip install -U pip
+      pip install -r requirements.txt
+    target: auto
+
+  - name: lint
+    run: flake8 .
+    target: auto
+    needs: [setup]
+
+  - name: test
+    run: pytest -q
+    target: auto
+    needs: [setup]
+
+
+
+
+
+    

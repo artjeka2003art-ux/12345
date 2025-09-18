@@ -1,0 +1,4 @@
+[console_scripts]
+ghost = ghost:cli_entry
+ghost-coach = ghostcoach.daemon:main
+ghost-overlay = ghostoverlay.cli:main

@@ -1,0 +1,17 @@
+# CI шаблон для Java проекта
+name: ci_java
+steps:
+  - name: setup
+    run: |
+      mvn -B -ntp -DskipTests dependency:resolve || true
+    target: auto
+
+  - name: build
+    run: mvn -B -ntp -DskipTests package
+    target: auto
+    needs:
+
+  - name: test
+    run: mvn -B -ntp test
+    target: auto
+    needs:

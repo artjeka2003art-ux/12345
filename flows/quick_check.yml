@@ -1,0 +1,51 @@
+name: quick_check
+
+# (необязательно) можно хранить глобальные переменные тут
+env: {}
+
+# если используешь секреты — оставь путь, иначе можно убрать
+# secrets_from: "~/.ghostcmd/secrets.yml"
+
+steps:
+  - name: setup
+    run: |
+      set -x
+      python3 --version
+      pip3 --version
+    target: auto
+
+  - name: build
+    needs: [setup]
+    run: |
+      echo "VERSION=v1.2.3-rc1" | tee
+    target: auto
+    capture:
+      VERSION:
+        regex: 'VERSION=([^\r\n]+)'
+
+  # смоделируем флейки: 1-я и 2-я попытки падают, 3-я — ок
+  - name: flaky
+    needs: [build]
+    run: |
+      set -x
+      cnt_file=".ghost_flaky_test_count"
+      cnt=$(test -f "$cnt_file" && cat "$cnt_file" || echo 0)
+      cnt=$((cnt+1))
+      echo "$cnt" > "$cnt_file"
+      echo "flaky attempt=$cnt"
+      if [ "$cnt" -lt 3 ]; then
+        exit 1
+      fi
+      echo "OK on attempt $cnt"
+    retries:
+      max: 2         # итого 3 попытки: 1 + 2 ретрая
+      delay: 2s
+      backoff: 2.0
+    target: auto
+
+  - name: announce
+    needs: [flaky]
+    if: '[ -n "$SHOULD_ANNOUNCE" ]'   # <-- читаем реальное окружение, а не env.*
+    run: |
+      echo "Announcing VERSION=${{ steps.build.outputs.VERSION }}"
+    target: auto

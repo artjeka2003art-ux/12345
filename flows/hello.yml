@@ -1,0 +1,38 @@
+name: hello_flow
+
+env:
+  GLOBAL_FLAG: "1"              # глобальные ENV для всех шагов
+
+secrets_from: "~/.ghostcmd/secrets.yml"  # опционально; если файла нет — подстановка вернёт пусто
+
+steps:
+  - name: whoami
+    run: whoami
+    target: auto
+    retries:                     # авто-повтор при не-нулевом exit code
+      max: 1
+      delay: 500ms
+      backoff: 2.0
+    capture:                     # вытащим имя пользователя из stdout
+      USER:
+        regex: '^([^\r\n]+)'
+
+  - name: list_root
+    run: ls -la
+    target: docker               # уводим в песочницу
+    timeout: 10s
+    retries:
+      max: 2
+      delay: 1s
+      backoff: 1.5
+
+  - name: echo_env
+    needs: [whoami, list_root]
+    target: auto
+    env:
+      MYVAR: ghostcmd            # локальный ENV для шага
+    run: |
+      echo "ENV=$MYVAR"
+      echo "GLOBAL=$GLOBAL_FLAG"   # из глобальных env
+      echo "USER_FROM_CAPTURE=${{ steps.whoami.outputs.USER }}"   # из capture предыдущего шага
+      echo "SECRET=${{ secrets.DUMMY }}"  # из secrets.yml (если есть)

@@ -1,0 +1,7 @@
+# flows/ssh_smoke.yml
+name: ssh_smoke
+steps:
+  - name: whoami
+    target: ssh:prod
+    run: 'whoami && uname -a'
+

@@ -1,0 +1,18 @@
+---  # CI шаблон для .NET проекта
+name: ci_dotnet
+steps:
+  - name: restore
+    run: dotnet restore
+    target: auto
+
+  - name: build
+    run: dotnet build --configuration Release
+    target: auto
+    needs: [restore]
+
+  - name: test
+    run: dotnet test --no-build --verbosity normal
+    target: auto
+    needs: [build]
+
+

@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ghostcmd"
+version = "0.1.0"
+description = "GhostCMD core + GhostOverlay + GhostCoach"
+authors = [{ name = "GhostCMD Team" }]
+requires-python = ">=3.8"
+dependencies = []
+
+[project.scripts]
+ghost = "ghost:cli_entry"          # Основное ядро (CLI + интерактив)
+ghost-overlay = "ghostoverlay.cli:main"  # Overlay HUD
+ghost-coach = "ghostcoach.daemon:main"   # Coach демон
+
+[tool.setuptools]
+packages = ["ghostcoach", "ghostoverlay"]
+py-modules = ["ghost"]  # отдельный модуль (ghost.py в корне)

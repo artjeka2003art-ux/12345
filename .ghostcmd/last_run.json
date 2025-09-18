@@ -1,0 +1,39 @@
+{
+  "run_id": "4375d4d5-fb64-4e3a-ada5-29c7a4c40c7b",
+  "workflow_name": "ssh_smoke",
+  "file_path": "flows/ssh_smoke.yml",
+  "yaml_sha256": "099341c3f7ef0c302d1ec6ee9c88fa183f2e855c4d1447993f835a074f4bd36c",
+  "started_at": 1757426167.741146,
+  "finished_at": 1757426178.252664,
+  "ok": false,
+  "steps": [
+    {
+      "name": "whoami",
+      "status": "failed",
+      "ok": false,
+      "exit_code": 255,
+      "duration_sec": 5.104,
+      "target": "ssh",
+      "stdout_path": null,
+      "stderr_path": "/tmp/.ghostcmd_4375d4d5-fb64-4e3a-ada5-29c7a4c40c7b_1_1757426173133.err",
+      "fingerprint": "bf386afcd4a6f3d0bea319a3eec0c9a6b1a8402adba051ecccaae30bc72c7b79",
+      "meta": {
+        "limits": true,
+        "risk": "read_only",
+        "target": "ssh",
+        "attempts": [
+          {
+            "attempt": 1,
+            "exit_code": 255,
+            "duration": 5.104,
+            "ok": false,
+            "error": "non-zero exit"
+          }
+        ]
+      }
+    }
+  ],
+  "step_fingerprints": {
+    "whoami": "bf386afcd4a6f3d0bea319a3eec0c9a6b1a8402adba051ecccaae30bc72c7b79"
+  }
+}

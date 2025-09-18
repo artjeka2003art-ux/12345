@@ -1,0 +1,17 @@
+---  # CI шаблон для Docker проекта
+name: ci_docker
+steps:
+  - name: build
+    run: docker build -t myapp:latest .
+    target: host
+
+  - name: run
+    run: docker run --rm myapp:latest
+    target: host
+    needs: [build]
+
+  - name: push
+    run: docker push myapp:latest
+    target: host
+    needs: [build]
+

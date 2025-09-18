@@ -1,0 +1,26 @@
+# config/limits.yml
+# Лимиты по уровням риска. Значения можно править без изменения кода.
+
+limits:
+  read_only:
+    timeout_sec: 30      # Максимальная длительность команды (сек)
+    grace_kill_sec: 3    # Сколько ждать мягкого завершения перед жёстким
+    cpus: 0.5            # Для Docker: доля CPU
+    memory_mb: 256       # Для Docker: ограничение памяти (МБ)
+    pids: 128            # Для Docker: ограничение количества процессов
+    no_network: true     # Для Docker: без сети
+  mutating:
+    timeout_sec: 120
+    grace_kill_sec: 3
+    cpus: 1.0
+    memory_mb: 1024
+    pids: 256
+    no_network: false
+  dangerous:
+    timeout_sec: 60
+    grace_kill_sec: 3
+    cpus: 0.5
+    memory_mb: 512
+    pids: 128
+    no_network: true
+    

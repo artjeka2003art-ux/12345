@@ -1,0 +1,42 @@
+name: hello_flow_v2
+
+env:
+  GLOBAL_FLAG: "1"
+
+secrets_from: "~/.ghostcmd/secrets.yml"
+
+steps:
+  - name: whoami
+    run: |
+      echo "setup done"
+      echo "USER=$(whoami)"
+    capture:
+      USER:
+        regex: "^USER=(.*)$"
+    target: auto
+    retries:
+      max: 1
+      delay: 500ms
+
+  - name: flaky_test
+    run: |
+      echo "running tests"
+      # имитация падения
+      exit 1
+    retries:
+      max: 2
+      delay: 1s
+      backoff: 1.5
+    continue_on_error: true
+    target: docker    # как ты просил: второй шаг идёт в docker
+
+  - name: deploy
+    needs: [flaky_test]
+    run: |
+      echo "Deploying for ${{ steps.whoami.outputs.USER }}"
+      echo "GLOBAL=$GLOBAL_FLAG"
+      echo "SECRET=${{ secrets.DUMMY }}"
+    timeout: 5s
+    env:
+      CI: "true"      # как просил: добавить CI=true
+      VERSION: "123"  # и VERSION=123

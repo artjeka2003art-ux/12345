@@ -1,0 +1,18 @@
+---  # CI шаблон для Rust проекта
+name: ci_rust
+steps:
+  - name: setup
+    run: cargo fetch
+    target: auto
+
+  - name: build
+    run: cargo build --release
+    target: auto
+    needs: [setup]
+
+  - name: test
+    run: cargo test
+    target: auto
+    needs: [build]
+
+    

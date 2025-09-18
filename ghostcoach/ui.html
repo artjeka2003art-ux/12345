@@ -1,0 +1,122 @@
+<!-- ghostcoach/ui.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>GhostCoach — overlay</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 24px; background: #0b0b0f; color: #e5e7eb; }
+    .card { background: #111318; border: 1px solid #1f2430; border-radius: 16px; padding: 20px; max-width: 760px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
+    .title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+    .cmd { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; background: #0a0c12; border: 1px solid #1a1f2b; border-radius: 12px; padding: 12px; margin: 12px 0; overflow-x: auto; }
+    .row { display: flex; gap: 8px; margin-top: 8px; }
+    button { padding: 10px 14px; border-radius: 10px; border: 1px solid #2a3243; background: #161a22; color: #e5e7eb; cursor: pointer; }
+    button:hover { background: #1b2130; }
+    .muted { color: #9aa4b2; font-size: 13px; }
+    .small { font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="title" id="title">Жду обновления из терминала…</div>
+    <div class="cmd" id="command">—</div>
+    <div class="muted" id="explain">Открой подсказки GhostCoach: отправь POST на /update или запусти shell hook.</div>
+    <div class="row">
+        <button id="copy">Copy</button>
+        <button id="run">Run</button>
+        <button id="explainBtn">Explain</button>
+      </div>
+      
+      <div id="explainBox" style="display:none; margin-top:10px;">
+        <div class="muted" id="explainLong" style="white-space:pre-wrap;"></div>
+      </div>
+      
+      <div class="muted small" id="meta" style="margin-top:12px;">Нет данных</div>
+  </div>
+
+  <script>
+    const port = 8765;
+    const titleEl = document.getElementById('title');
+    const cmdEl = document.getElementById('command');
+    const explainEl = document.getElementById('explain');
+    const metaEl = document.getElementById('meta');
+  
+    const explainBox = document.getElementById('explainBox');
+    const explainLongEl = document.getElementById('explainLong');
+  
+    document.getElementById('copy').onclick = async () => {
+      const text = cmdEl.textContent;
+      await navigator.clipboard.writeText(text);
+      alert('Скопировано: ' + text);
+    };
+
+    document.getElementById('run').onclick = async () => {
+  // Берём исходный текст из поля команды
+    let raw = cmdEl.textContent || '';
+
+    // 1) выкидываем строки-комментарии и пустые
+    const cleaned = raw
+        .split('\n')
+        .filter(line => !/^\s*#/.test(line))
+        .join('\n')
+        .trim();
+
+    if (!cleaned) {
+        alert('Нет исполнимой команды (одни комментарии).');
+        return;
+    }
+
+    try {
+        const res = await fetch(`http://127.0.0.1:${port}/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: cleaned })
+        });
+        const data = await res.json();
+        if (data.ok) {
+        alert('🚀 Команда запущена (' + (data.backend || 'unknown') + '): ' + cleaned);
+        } else {
+        alert('Ошибка: ' + data.error);
+        }
+    } catch (e) {
+        alert('Ошибка Run: ' + e);
+    }
+    };
+
+
+  
+    document.getElementById('explainBtn').onclick = () => {
+      if (explainBox.style.display === 'none') {
+        explainBox.style.display = 'block';
+      } else {
+        explainBox.style.display = 'none';
+      }
+    };
+  
+    function updateTip(payload) {
+      const tip = payload.tip || {};
+      titleEl.textContent = tip.title || 'Подсказка';
+      cmdEl.textContent = tip.command || '—';
+      explainEl.textContent = tip.explain || '';
+      explainLongEl.textContent = tip.explain_long || tip.explain || '';
+      const u = payload.update || {};
+      metaEl.textContent = `[${payload.ts}] ${u.cwd || ''}  $ ${u.last_cmd || ''}  (exit=${u.exit_code || 0})`;
+    }
+  
+    const ev = new EventSource(`http://127.0.0.1:${port}/stream`);
+    ev.addEventListener('tip', (e) => {
+      try { updateTip(JSON.parse(e.data)); } catch (err) { console.error(err); }
+    });
+    ev.onerror = (e) => console.error('SSE error', e);
+  
+    fetch(`http://127.0.0.1:${port}/latest`)
+      .then(r => r.json())
+      .then((data) => {
+        if (data && data.tip) updateTip(data);
+      })
+      .catch(console.error);
+  </script>
+  
+</body>
+</html>

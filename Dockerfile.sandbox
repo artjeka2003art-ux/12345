@@ -1,0 +1,10 @@
+# Dockerfile.sandbox
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8 LC_ALL=C.UTF-8
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash coreutils findutils grep sed procps util-linux \
+    iproute2 iputils-ping net-tools curl wget ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+CMD ["/bin/bash"]

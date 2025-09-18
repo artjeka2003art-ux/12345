@@ -1,0 +1,8 @@
+---  # Generic CI шаблон (универсальный)
+name: ci_generic
+steps:
+  - name: hello
+    run: echo "Hello CI"
+    target: auto
+
+    

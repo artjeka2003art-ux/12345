@@ -1,0 +1,27 @@
+name: mask_cwd_check
+
+secrets_from: "~/.ghostcmd/secrets.yml"
+
+steps:
+  - name: prepare
+    run: |
+      python3 --version
+      pip3 --version
+
+  - name: build
+    needs: [prepare]
+    cwd: .
+    run: |
+      echo "VERSION=v9.9.9-secret" | tee
+      echo "DUMMY=${{ secrets.DUMMY }}"
+    capture:
+      VERSION:
+        regex: '^VERSION=([^\r\n]+)'
+    mask: ["v9.9.9-secret"]
+
+  - name: announce_if_allowed
+    needs: [build]
+    run: |
+      echo "Announcing ${{ steps.build.outputs.VERSION }} with secret=${{ secrets.DUMMY }}"
+    if: '[ -n "$SHOULD_ANNOUNCE" ]'
+

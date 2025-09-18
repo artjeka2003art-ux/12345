@@ -1,0 +1,20 @@
+---  # CI шаблон для Node.js проекта
+name: ci_node
+steps:
+  - name: setup
+    run: |
+      npm install
+    target: auto
+
+  - name: lint
+    run: npx eslint .
+    target: auto
+    needs: [setup]
+
+  - name: test
+    run: npm test
+    target: auto
+    needs: [setup]
+
+
+    
