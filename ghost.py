@@ -818,6 +818,7 @@ def handle_ci_init(cmdline: str) -> bool:
         init_ci(target=target, force=force, outfile=outfile, autopush=autopush)
     except Exception as e:
         print(Panel.fit(f"[red]Ошибка: {e}[/red]", border_style="red"))
+
     return True
 
 

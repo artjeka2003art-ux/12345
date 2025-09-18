@@ -1,14 +1,11 @@
 # core/ci_init.py
 from __future__ import annotations
 
-import os
-import shutil
+import subprocess
 from pathlib import Path
 from rich.panel import Panel
 from rich.console import Console
 import difflib
-
-import subprocess
 
 console = Console()
 
@@ -26,20 +23,42 @@ TEMPLATES = {
     "multi": "core/templates/gha_multi.yml",
 }
 
-def git_auto_commit(file: str, message: str):
+def git_auto_commit(file: str, message: str) -> str | None:
+    """
+    Добавляет файл в git, делает commit и push.
+    Возвращает ссылку на GitHub Actions, если удалось.
+    """
     try:
         subprocess.run(["git", "add", file], check=True)
         subprocess.run(["git", "commit", "-m", message], check=True)
         subprocess.run(["git", "push"], check=True)
+
+        # получаем url origin
+        url = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True, text=True, check=True
+        ).stdout.strip()
+
+        if url.endswith(".git"):
+            url = url[:-4]
+        actions_url = f"{url}/actions"
+
         print(f"✅ Изменения автоматически закоммичены и запушены: {file}")
+        print(f"🔗 Смотри прогон: {actions_url}")
+        return actions_url
+
     except subprocess.CalledProcessError as e:
         print(f"⚠️ Не удалось выполнить git push: {e}")
+        return None
+
 
 def init_ci(target: str = "python", force: bool = False, outfile: str | None = None, autopush: bool = False) -> str:
     """
-    Создаёт .github/workflows/ci.yml из шаблона.
-    target: python|node|go|docker
+    Создаёт .github/workflows/*.yml из шаблона.
+    target: python|node|go|docker|java|dotnet|rust|php|ruby|android|multi
     force: если True — перезапишет существующий файл.
+    outfile: имя файла (например, ci_rust.yml). Если None → используется ci.yml.
+    autopush: если True — сразу git add/commit/push.
     Возвращает путь к созданному файлу.
     """
     if target not in TEMPLATES:
@@ -51,20 +70,17 @@ def init_ci(target: str = "python", force: bool = False, outfile: str | None = N
 
     workflows_dir = Path(".github/workflows")
     workflows_dir.mkdir(parents=True, exist_ok=True)
-    # если передали явное имя файла
+
+    # выбираем путь сохранения
     if outfile:
-        # допускаем как "ci_rust.yml", так и "ci_rust.yaml"
         dst = workflows_dir / outfile
     else:
-        # по умолчанию старое поведение — один файл ci.yml
         dst = workflows_dir / "ci.yml"
-
 
     # читаем старый файл если есть
     old_text = None
     if dst.exists():
         old_text = dst.read_text()
-
         if not force:
             console.print(Panel.fit(
                 f"[yellow]Файл {dst} уже существует.[/yellow]\n"
@@ -77,7 +93,7 @@ def init_ci(target: str = "python", force: bool = False, outfile: str | None = N
     # читаем новый шаблон
     new_text = src.read_text()
 
-# Автоматически гарантируем наличие workflow_dispatch
+    # Автоматически гарантируем наличие workflow_dispatch
     if "workflow_dispatch" not in new_text:
         lines = []
         inserted = False
@@ -87,7 +103,6 @@ def init_ci(target: str = "python", force: bool = False, outfile: str | None = N
                 lines.append("  workflow_dispatch:")
                 inserted = True
         if not inserted:
-            # если почему-то нет блока pull_request — просто добавим в конец on:
             patched = []
             for line in lines:
                 patched.append(line)
@@ -114,13 +129,19 @@ def init_ci(target: str = "python", force: bool = False, outfile: str | None = N
 
     # записываем новый файл
     dst.write_text(new_text)
+
+    # если --push → пушим в git и показываем ссылку
     if autopush:
-        git_auto_commit(str(dst), f"update CI for {target}")
-    console.print(Panel.fit(
-        f"[green]Создан workflow для GitHub Actions ({target})[/green]\n{dst}",
-        border_style="green"
-    ))
+        actions_url = git_auto_commit(str(dst), f"update CI for {target}")
+        if actions_url:
+            console.print(Panel(
+                f"[green]Workflow успешно создан и запушен 🚀[/green]\n[link={actions_url}]Открыть Actions[/link]",
+                border_style="green"
+            ))
+    else:
+        console.print(Panel.fit(
+            f"[green]Создан workflow для GitHub Actions ({target})[/green]\n{dst}",
+            border_style="green"
+        ))
+
     return str(dst)
-
-    
-
