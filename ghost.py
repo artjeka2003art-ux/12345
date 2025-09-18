@@ -86,6 +86,7 @@ from core.exec_limits import run_on_host_with_limits   # для тестовог
 from core.ci_github import gh_exists, gh_version, gh_is_authenticated, install_hint
 from core.ci_init import init_ci
 from core.ci_manage import ci_list, ci_run, ci_logs_last
+from core.ci_init import init_ci, TEMPLATES
 
 
 
@@ -772,11 +773,12 @@ from core.ci_init import init_ci, TEMPLATES
 
 def handle_ci_init(cmdline: str) -> bool:
     """
-    Команды:
+    Примеры:
       - ci init
-      - ci init python|node|go|docker|java|dotnet|rust|php|ruby|android|multi
-      - ci init --force
-      - ci init node --force
+      - ci init python
+      - ci init rust --force
+      - ci init node --as ci_node.yml
+      - ci init go --auto            # сохранит как .github/workflows/ci_go.yml
     """
     raw = cmdline or ""
     text = _norm_text(raw)
@@ -786,22 +788,37 @@ def handle_ci_init(cmdline: str) -> bool:
     parts = raw.strip().split()
     target = "python"
     force = False
+    outfile = None
+    auto = False
 
-    for p in parts[2:]:
-        key = p.lower()
-        if key in TEMPLATES:
-            target = key
-        elif p in ("--force", "-f"):
+    i = 2
+    while i < len(parts):
+        tok = parts[i]
+        low = tok.lower()
+        if low in TEMPLATES:
+            target = low
+        elif tok in ("--force", "-f"):
             force = True
+        elif tok in ("--as", "--file"):
+            if i + 1 < len(parts):
+                outfile = parts[i + 1]
+                i += 1
+        elif tok == "--auto":
+            auto = True
+        i += 1
 
-    # 🐞 выводим для отладки
-    print(f"[debug] handle_ci_init: target={target}, force={force}, parts={parts}")
+    if auto and not outfile:
+        outfile = f"ci_{target}.yml"
+
+    print(f"[debug] handle_ci_init: target={target}, force={force}, outfile={outfile}, parts={parts}")
 
     try:
-        init_ci(target=target, force=force)
+        init_ci(target=target, force=force, outfile=outfile)
     except Exception as e:
         print(Panel.fit(f"[red]Ошибка: {e}[/red]", border_style="red"))
     return True
+
+
 
 
 def handle_ci_manage(cmdline: str) -> bool:
@@ -940,6 +957,9 @@ def print_help():
     t.add_row("ci list", "Список workflows в репозитории")
     t.add_row("ci run [имя.yml]", "Запустить workflow (по умолчанию первый)")
     t.add_row("ci logs last", "Показать логи последнего запуска workflow")
+    t.add_row("ci init <tpl> [--auto|--as <file.yml>] [--force]", "Создать workflow (по умолчанию .github/workflows/ci.yml)")
+    .add_row("  tpl ∈ " + ", ".join(sorted(TEMPLATES.keys())), "Доступные шаблоны")
+
 
 
 

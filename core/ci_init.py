@@ -25,7 +25,7 @@ TEMPLATES = {
 }
 
 
-def init_ci(target: str = "python", force: bool = False) -> str:
+def init_ci(target: str = "python", force: bool = False, outfile: str | None = None) -> str:
     """
     Создаёт .github/workflows/ci.yml из шаблона.
     target: python|node|go|docker
@@ -39,8 +39,16 @@ def init_ci(target: str = "python", force: bool = False) -> str:
     if not src.exists():
         raise FileNotFoundError(f"Шаблон не найден: {src}")
 
-    dst = Path(".github/workflows/ci.yml")
-    dst.parent.mkdir(parents=True, exist_ok=True)
+    workflows_dir = Path(".github/workflows")
+    workflows_dir.mkdir(parents=True, exist_ok=True)
+    # если передали явное имя файла
+    if outfile:
+        # допускаем как "ci_rust.yml", так и "ci_rust.yaml"
+        dst = workflows_dir / outfile
+    else:
+        # по умолчанию старое поведение — один файл ci.yml
+        dst = workflows_dir / "ci.yml"
+
 
     # читаем старый файл если есть
     old_text = None
