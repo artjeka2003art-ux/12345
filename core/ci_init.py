@@ -8,6 +8,8 @@ from rich.panel import Panel
 from rich.console import Console
 import difflib
 
+import subprocess
+
 console = Console()
 
 TEMPLATES = {
@@ -24,8 +26,16 @@ TEMPLATES = {
     "multi": "core/templates/gha_multi.yml",
 }
 
+def git_auto_commit(file: str, message: str):
+    try:
+        subprocess.run(["git", "add", file], check=True)
+        subprocess.run(["git", "commit", "-m", message], check=True)
+        subprocess.run(["git", "push"], check=True)
+        print(f"✅ Изменения автоматически закоммичены и запушены: {file}")
+    except subprocess.CalledProcessError as e:
+        print(f"⚠️ Не удалось выполнить git push: {e}")
 
-def init_ci(target: str = "python", force: bool = False, outfile: str | None = None) -> str:
+def init_ci(target: str = "python", force: bool = False, outfile: str | None = None, autopush: bool = False) -> str:
     """
     Создаёт .github/workflows/ci.yml из шаблона.
     target: python|node|go|docker
@@ -104,6 +114,8 @@ def init_ci(target: str = "python", force: bool = False, outfile: str | None = N
 
     # записываем новый файл
     dst.write_text(new_text)
+    if autopush:
+        git_auto_commit(str(dst), f"update CI for {target}")
     console.print(Panel.fit(
         f"[green]Создан workflow для GitHub Actions ({target})[/green]\n{dst}",
         border_style="green"

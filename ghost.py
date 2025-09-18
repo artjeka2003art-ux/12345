@@ -770,7 +770,6 @@ def handle_ci_auth(cmdline: str) -> bool:
     return True
 
 from core.ci_init import init_ci, TEMPLATES
-
 def handle_ci_init(cmdline: str) -> bool:
     """
     Примеры:
@@ -778,7 +777,7 @@ def handle_ci_init(cmdline: str) -> bool:
       - ci init python
       - ci init rust --force
       - ci init node --as ci_node.yml
-      - ci init go --auto            # сохранит как .github/workflows/ci_go.yml
+      - ci init go --auto --push
     """
     raw = cmdline or ""
     text = _norm_text(raw)
@@ -790,6 +789,7 @@ def handle_ci_init(cmdline: str) -> bool:
     force = False
     outfile = None
     auto = False
+    autopush = False
 
     i = 2
     while i < len(parts):
@@ -805,18 +805,21 @@ def handle_ci_init(cmdline: str) -> bool:
                 i += 1
         elif tok == "--auto":
             auto = True
+        elif tok == "--push":
+            autopush = True
         i += 1
 
     if auto and not outfile:
         outfile = f"ci_{target}.yml"
 
-    print(f"[debug] handle_ci_init: target={target}, force={force}, outfile={outfile}, parts={parts}")
+    print(f"[debug] handle_ci_init: target={target}, force={force}, outfile={outfile}, autopush={autopush}, parts={parts}")
 
     try:
-        init_ci(target=target, force=force, outfile=outfile)
+        init_ci(target=target, force=force, outfile=outfile, autopush=autopush)
     except Exception as e:
         print(Panel.fit(f"[red]Ошибка: {e}[/red]", border_style="red"))
     return True
+
 
 
 
@@ -959,6 +962,7 @@ def print_help():
     t.add_row("ci logs last", "Показать логи последнего запуска workflow")
     t.add_row("ci init <tpl> [--auto|--as <file.yml>] [--force]", "Создать workflow (по умолчанию .github/workflows/ci.yml)")
     t.add_row("  tpl ∈ " + ", ".join(sorted(TEMPLATES.keys())), "Доступные шаблоны")
+    t.add_row("  --push", "Автоматически git add/commit/push после генерации CI")
 
 
 
