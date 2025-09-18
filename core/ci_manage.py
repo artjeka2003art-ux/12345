@@ -37,3 +37,29 @@ def ci_logs_last() -> None:
         console.print(Panel(out, title="Логи последнего запуска", border_style="blue"))
     else:
         console.print(Panel.fit(f"[red]Ошибка:[/red]\n{err}", border_style="red"))
+        
+def handle_ci_run(parts: list[str]):
+    """
+    ci run [filename]
+    Запускает GitHub Actions workflow.
+    """
+    if len(parts) < 2:
+        # список доступных workflow
+        workflows = list(Path(".github/workflows").glob("*.yml"))
+        if not workflows:
+            print(Panel("❌ Нет доступных workflow в .github/workflows/", border_style="red"))
+            return
+        items = "\n".join(f"- {wf.name}" for wf in workflows)
+        print(Panel(f"Укажи имя workflow.\nДоступные:\n{items}", border_style="yellow"))
+        return
+
+    filename = parts[1]
+    workflow_path = Path(".github/workflows") / filename
+    if not workflow_path.exists():
+        workflows = list(Path(".github/workflows").glob("*.yml"))
+        items = "\n".join(f"- {wf.name}" for wf in workflows) or "(пусто)"
+        print(Panel(f"❌ Файл {filename} не найден.\nДоступные:\n{items}", border_style="red"))
+        return
+
+    # если файл найден → запускаем через gh
+    os.system(f"gh workflow run {filename}")
