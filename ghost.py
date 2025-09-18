@@ -768,11 +768,13 @@ def handle_ci_auth(cmdline: str) -> bool:
         print(Panel.fit(body, border_style="yellow", padding=(1,2)))
     return True
 
+from core.ci_init import init_ci, TEMPLATES
+
 def handle_ci_init(cmdline: str) -> bool:
     """
     Команды:
       - ci init
-      - ci init python|node|go|docker
+      - ci init python|node|go|docker|java|dotnet|rust|php|ruby|android|multi
       - ci init --force
       - ci init node --force
     """
@@ -781,13 +783,14 @@ def handle_ci_init(cmdline: str) -> bool:
     if not text.startswith("ci init"):
         return False
 
-    parts = raw.strip().split()  # <-- тут именно raw, не нормализованный text
+    parts = raw.strip().split()
     target = "python"
     force = False
 
     for p in parts[2:]:
-        if p.lower() in ("python", "node", "go", "docker"):
-            target = p.lower()
+        key = p.lower()
+        if key in TEMPLATES:
+            target = key
         elif p in ("--force", "-f"):
             force = True
 
@@ -799,6 +802,7 @@ def handle_ci_init(cmdline: str) -> bool:
     except Exception as e:
         print(Panel.fit(f"[red]Ошибка: {e}[/red]", border_style="red"))
     return True
+
 
 def handle_ci_manage(cmdline: str) -> bool:
     raw = cmdline or ""

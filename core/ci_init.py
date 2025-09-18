@@ -59,6 +59,26 @@ def init_ci(target: str = "python", force: bool = False) -> str:
     # читаем новый шаблон
     new_text = src.read_text()
 
+# Автоматически гарантируем наличие workflow_dispatch
+    if "workflow_dispatch" not in new_text:
+        lines = []
+        inserted = False
+        for line in new_text.splitlines():
+            lines.append(line)
+            if line.strip().startswith("pull_request:") and not inserted:
+                lines.append("  workflow_dispatch:")
+                inserted = True
+        if not inserted:
+            # если почему-то нет блока pull_request — просто добавим в конец on:
+            patched = []
+            for line in lines:
+                patched.append(line)
+                if line.strip().startswith("on:") and not inserted:
+                    patched.append("  workflow_dispatch:")
+                    inserted = True
+            lines = patched
+        new_text = "\n".join(lines)
+
     # если был старый текст и включён force — показываем diff
     if old_text is not None and force:
         diff = difflib.unified_diff(
