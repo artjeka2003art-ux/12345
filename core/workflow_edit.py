@@ -89,23 +89,34 @@ def _coerce_env(x: Any) -> Dict[str, str]:
 # Для адресации шага используем либо {"index": N}, либо {"name": "step_name"}.
 # -------------------------------
 
-def _resolve_step_ref(steps: List[dict], ref: Dict[str, Any]) -> Tuple[dict, int]:
-    if "index" in ref:
-        idx = int(ref["index"])
-        return _find_step_by_index(steps, idx), idx
-    if "name" in ref:
-        idx = _find_step_index_by_name(steps, str(ref["name"]))
-        return _find_step_by_index(steps, idx), idx
-    raise ValueError("Операция не содержит index/name для шага.")
+def _resolve_step_ref(steps: list[dict], step_ref: dict | str) -> tuple[dict, int]:
+    """
+    Находит шаг по имени или индексу.
+    Возвращает (step_dict, 1-based index).
+    """
+    if isinstance(step_ref, dict):
+        if "index" in step_ref:
+            idx = int(step_ref["index"])
+            if 1 <= idx <= len(steps):
+                return steps[idx - 1], idx
+            raise ValueError(f"Шаг с index={idx} не найден")
 
-def _ensure_list_str(x) -> List[str]:
-    if x is None:
-        return []
-    if isinstance(x, str):
-        return [x]
-    if isinstance(x, (list, tuple)):
-        return [str(i) for i in x]
-    return [str(x)]
+        if "name" in step_ref:
+            target_name = str(step_ref["name"]).strip().lower()
+            for i, s in enumerate(steps, 1):
+                if str(s.get("name", "")).strip().lower() == target_name:
+                    return s, i
+            raise ValueError(f"Шаг с name='{step_ref['name']}' не найден")
+
+    elif isinstance(step_ref, str):
+        target_name = step_ref.strip().lower()
+        for i, s in enumerate(steps, 1):
+            if str(s.get("name", "")).strip().lower() == target_name:
+                return s, i
+        raise ValueError(f"Шаг с name='{step_ref}' не найден")
+
+    raise ValueError(f"Неподдерживаемый step_ref: {step_ref}")
+
 
 def apply_ops(data: Any, ops: List[Dict[str, Any]]) -> List[str]:
     """

@@ -126,28 +126,29 @@ def _select_workflow(filename: Optional[str]) -> Optional[Path]:
 
 def _detect_kind(yaml_data: Any) -> str:
     """
-    Детектируем стек по тексту YAML. Используем dump_yaml_preserve, чтобы сохранить исходные конструкции.
+    Определяет стек по содержимому workflow.
+    ВАЖНО: Rust проверяется ПЕРВЫМ, чтобы не перепутать с Go.
     """
     try:
         text = dump_yaml_preserve(yaml_data).lower()
     except Exception:
-        # fallback
         text = yaml.safe_dump(yaml_data, sort_keys=False).lower()
 
+    # Rust — проверяем первым!
+    if "dtolnay/rust-toolchain" in text or "actions-rs" in text or "cargo " in text:
+        return "rust"
+    if "actions/setup-go" in text or "\ngo " in text or "go build" in text:
+        return "go"
     if "actions/setup-python" in text or "pip install" in text or "pytest" in text:
         return "python"
     if "actions/setup-node" in text or "npm " in text or "yarn " in text or "pnpm " in text:
         return "node"
-    if "actions/setup-go" in text or "\ngo " in text or "go build" in text:
-        return "go"
     if "docker/login-action" in text or "build-push-action" in text or "uses: docker/" in text:
         return "docker"
     if "actions/setup-java" in text or "gradle " in text or "mvn " in text:
         return "java"
     if "actions/setup-dotnet" in text:
         return "dotnet"
-    if "dtolnay/rust-toolchain" in text or "actions-rs" in text or "cargo " in text:
-        return "rust"
     if "setup-php" in text:
         return "php"
     if "setup-ruby" in text or "bundle " in text:
@@ -157,28 +158,29 @@ def _detect_kind(yaml_data: Any) -> str:
     return "python"
 
 
+
 def _normalize_workflow_yaml(data: dict) -> dict:
     """
     Приводим структуру к валидной для GitHub Actions:
       - корневой ключ событий: on (иногда превращается в булев True → потом сериализуется как 'true:')
       - удаляем служебные поля из шагов (target/needs — это не GHA)
       - чиним run (убираем лишние \n в конце)
+      - убираем дубли шагов по имени
     """
     # ---- 1) Корень: on
     # случай 1: ключ 'true' как строка
     if "true" in data:
-        # если это именно под-объект событий — перенесём в 'on'
         if "on" not in data:
             data["on"] = data["true"]
         data.pop("true", None)
 
-    # случай 2: ключ булев True — типичная проблема YAML 1.1
+    # случай 2: ключ булев True (YAML 1.1 интерпретирует on: как True)
     if True in data:  # type: ignore[operator]
         if "on" not in data:
             data["on"] = data[True]  # type: ignore[index]
         data.pop(True, None)  # type: ignore[arg-type]
 
-    # если on отсутствует, но есть стандартные секции — соберём минимальный on
+    # если on отсутствует, добавим минимальный
     if "on" not in data:
         data["on"] = {"workflow_dispatch": {}}
 
@@ -187,19 +189,14 @@ def _normalize_workflow_yaml(data: dict) -> dict:
         od = data["on"]
         if od.get("workflow_dispatch") is None:
             od["workflow_dispatch"] = {}
-        # преобразуем ветки из однострочного формата
+        # преобразуем branches из строки в список
         for sect in ("push", "pull_request"):
             if isinstance(od.get(sect), dict):
                 br = od[sect].get("branches")
-                if isinstance(br, list):
-                    pass
-                elif isinstance(br, str):
+                if isinstance(br, str):
                     od[sect]["branches"] = [br]
-                elif br is None:
-                    # оставим без branches
-                    pass
 
-    # ---- 2) Шаги: чистим служебные поля и приводим run
+    # ---- 2) Шаги: чистим служебные поля, run и дубликаты
     jobs = data.get("jobs")
     if isinstance(jobs, dict):
         for job in jobs.values():
@@ -208,11 +205,12 @@ def _normalize_workflow_yaml(data: dict) -> dict:
             steps = job.get("steps")
             if not isinstance(steps, list):
                 continue
+
             fixed: list[dict] = []
             for step in steps:
                 if not isinstance(step, dict):
                     continue
-                # копируем только валидные для GHA поля + всё остальное, кроме служебных
+
                 new_step: dict = {}
 
                 # порядок ключей: name → uses → with → run → остальное
@@ -229,14 +227,25 @@ def _normalize_workflow_yaml(data: dict) -> dict:
                     else:
                         new_step["run"] = run_val
 
-                # переносим остальные поля, исключая служебные
+                # остальные поля (кроме служебных)
                 for k, v in step.items():
                     if k in ("name", "uses", "with", "run", "target", "needs"):
                         continue
                     new_step[k] = v
 
                 fixed.append(new_step)
-            job["steps"] = fixed
+
+            # --- убираем дубликаты шагов по имени
+            seen = set()
+            unique = []
+            for st in fixed:
+                nm = st.get("name")
+                if nm and nm in seen:
+                    continue
+                if nm:
+                    seen.add(nm)
+                unique.append(st)
+            job["steps"] = unique
 
     return data
 
