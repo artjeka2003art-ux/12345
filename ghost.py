@@ -770,6 +770,7 @@ def handle_ci_auth(cmdline: str) -> bool:
     return True
 
 from core.ci_init import init_ci, TEMPLATES
+from core.ci_ai import ci_edit, ci_fix_last
 def handle_ci_init(cmdline: str) -> bool:
     """
     Примеры:
@@ -848,6 +849,37 @@ def handle_ci_manage(cmdline: str) -> bool:
 
     if text.startswith("ci logs last"):
         ci_logs_last()
+        return True
+    if text.startswith("ci edit"):
+        try:
+            import shlex as _shlex
+            tokens = _shlex.split(raw)
+            # tokens: ['ci','edit','<features>', ...]
+            features = tokens[2] if len(tokens) > 2 else ""
+            filename = None
+            auto_yes = ("--yes" in tokens)
+            autopush = not ("--no-push" in tokens)
+            if "--file" in tokens:
+                idx = tokens.index("--file")
+                filename = tokens[idx+1] if idx + 1 < len(tokens) else None
+            ci_edit(features, filename, auto_yes=auto_yes, autopush=autopush)
+        except Exception as e:
+            print(Panel.fit(f"[red]ci edit: {e}[/red]", border_style="red"))
+        return True
+
+    if text.startswith("ci fix last"):
+        try:
+            import shlex as _shlex
+            tokens = _shlex.split(raw)
+            filename = None
+            auto_yes = ("--yes" in tokens)
+            autopush = not ("--no-push" in tokens)
+            if "--file" in tokens:
+                idx = tokens.index("--file")
+                filename = tokens[idx+1] if idx + 1 < len(tokens) else None
+            ci_fix_last(filename, auto_yes=auto_yes, autopush=autopush)
+        except Exception as e:
+            print(Panel.fit(f"[red]ci fix last: {e}[/red]", border_style="red"))
         return True
 
     return False
@@ -960,6 +992,8 @@ def print_help():
     t.add_row("overlay", "Включить/выключить GhostOverlay (HUD работает независимо от GhostCMD)")
     t.add_row("ci list", "Список workflows в репозитории")
     t.add_row("ci run [имя.yml]", "Запустить workflow (по умолчанию первый)")
+    t.add_row('ci edit "..." [--file <ci.yml>] [--yes] [--no-push]', "Правки YAML естественным языком (diff-превью, автопуш)")
+    t.add_row("ci fix last [--yes] [--no-push]", "ИИ-анализ логов последнего запуска и патч YAML")
     t.add_row("ci logs last", "Показать логи последнего запуска workflow")
     t.add_row("ci init <tpl> [--auto|--as <file.yml>] [--force]", "Создать workflow (по умолчанию .github/workflows/ci.yml)")
     t.add_row("  tpl ∈ " + ", ".join(sorted(TEMPLATES.keys())), "Доступные шаблоны")
