@@ -1,6 +1,8 @@
 # core/ci_ai.py
 from __future__ import annotations
 
+import yaml
+
 import os
 import re
 import subprocess
@@ -13,6 +15,7 @@ from rich.panel import Panel
 from core.yaml_edit import load_yaml_preserve, dump_yaml_preserve, preview_and_write_yaml, build_ops_from_nl
 from core.workflow_edit import apply_ops
 from core.ci_init import git_auto_commit
+
 
 console = Console()
 
@@ -30,21 +33,29 @@ def _list_workflows() -> list[Path]:
     return sorted([x for x in p.glob("*.yml") if x.is_file()])
 
 def _normalize_yaml_root(data):
-    # Если YAML загрузился как tuple (ok, data) — вытащим data
+    # Если пришёл tuple (ok, data) — вытащим data
     if isinstance(data, tuple) and len(data) == 2:
         data = data[1]
+
+    # Если вдруг это строка YAML — попробуем распарсить
+    if isinstance(data, str):
+        try:
+            data = yaml.safe_load(data)
+        except Exception as e:
+            raise ValueError(f"Не удалось распарсить YAML-строку: {e}")
 
     # Если multi-doc: берём первый словарь
     if isinstance(data, list):
         for doc in data:
             if isinstance(doc, dict):
                 return doc
-        raise ValueError("YAML содержит несколько документов, но ни один не является объектом (mapping).")
+        raise ValueError("YAML содержит несколько документов, но ни один не является объектом (dict).")
 
     if not isinstance(data, dict):
         raise ValueError(f"YAML root должен быть объектом (dict), а не {type(data).__name__}")
 
     return data
+
 
 
 def _read_workflow_name(path: Path) -> str:
