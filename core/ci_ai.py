@@ -198,24 +198,35 @@ _ERR_PATTERNS = [
 def _normalize_workflow_yaml(data: dict) -> dict:
     # Убираем случайный ключ 'true' на верхнем уровне
     if "true" in data and isinstance(data["true"], dict):
-        # перенесём его содержимое в 'on'
         if "on" not in data:
             data["on"] = data["true"]
         data.pop("true", None)
 
-    # Чиним шаги: если run — это строка с \n, делаем многострочный блок
+    # Чиним шаги
     for job in data.get("jobs", {}).values():
         if not isinstance(job, dict):
             continue
         steps = job.get("steps", [])
+        fixed_steps = []
         for step in steps:
-            if isinstance(step, dict) and isinstance(step.get("run"), str):
-                val = step["run"]
-                if "\n" in val:
-                    # убираем лишние кавычки/экранирования
-                    step["run"] = val.strip("\n")
+            if not isinstance(step, dict):
+                continue
+
+            # если run — строка с \n → вернём нормальный блок
+            if isinstance(step.get("run"), str) and "\n" in step["run"]:
+                step["run"] = step["run"].strip("\n")
+
+            # починим вложенность: если step потерял "uses" или "with" как отдельный словарь
+            if "uses" in step and not isinstance(step.get("name"), str):
+                # иногда парсер ломает структуру → оборачиваем
+                name_val = step.pop("uses")
+                step = {"name": str(name_val), **step}
+
+            fixed_steps.append(step)
+        job["steps"] = fixed_steps
 
     return data
+
 
 
 def _extract_error_tail(logs: str) -> str:
@@ -277,7 +288,7 @@ def ci_fix_last(filename: Optional[str] = None, *, auto_yes: bool = False, autop
     notes = apply_ops(data, ops)
     if notes:
         console.print(Panel("\n".join(notes), title="Изменения", border_style="cyan"))
-        
+
     data = _normalize_workflow_yaml(data)
     saved, backup = preview_and_write_yaml(str(wf_path), data, auto_yes=auto_yes)
     if not saved:
