@@ -201,9 +201,7 @@ _ERR_PATTERNS = [
 
 def _normalize_workflow_yaml(data: dict) -> dict:
     # 1. Убираем случайный ключ 'true'
-    if "true" in data and isinstance(data["true"], dict):
-        if "on" not in data:
-            data["on"] = data["true"]
+    if "true" in data:
         data.pop("true", None)
 
     # 2. Чиним шаги во всех jobs
@@ -219,30 +217,23 @@ def _normalize_workflow_yaml(data: dict) -> dict:
             # Собираем шаг заново с гарантированным порядком ключей
             new_step = {}
 
-            # name
             if "name" in step:
                 new_step["name"] = step["name"]
-
-            # uses → на том же уровне
             if "uses" in step:
                 new_step["uses"] = step["uses"]
-
-            # with → вложенный dict
             if "with" in step:
                 new_step["with"] = step["with"]
 
-            # run → многострочные строки переводим обратно в |
             if "run" in step:
                 run_val = step["run"]
                 if isinstance(run_val, str) and "\n" in run_val:
-                    # нормализуем многострочный блок
                     new_step["run"] = run_val.strip("\n")
                 else:
                     new_step["run"] = run_val
 
-            # остальные поля (target, needs, env и т.п.)
+            # остальные поля, кроме target/needs
             for k, v in step.items():
-                if k in ("name", "uses", "with", "run"):
+                if k in ("name", "uses", "with", "run", "target", "needs"):
                     continue
                 new_step[k] = v
 
@@ -251,6 +242,7 @@ def _normalize_workflow_yaml(data: dict) -> dict:
         job["steps"] = fixed_steps
 
     return data
+
 
 
 
