@@ -212,20 +212,40 @@ def _normalize_workflow_yaml(data: dict) -> dict:
             if not isinstance(step, dict):
                 continue
 
-            # если run — строка с \n → вернём нормальный блок
-            if isinstance(step.get("run"), str) and "\n" in step["run"]:
-                step["run"] = step["run"].strip("\n")
+            new_step = {}
+            # name
+            if "name" in step:
+                new_step["name"] = step["name"]
 
-            # починим вложенность: если step потерял "uses" или "with" как отдельный словарь
-            if "uses" in step and not isinstance(step.get("name"), str):
-                # иногда парсер ломает структуру → оборачиваем
-                name_val = step.pop("uses")
-                step = {"name": str(name_val), **step}
+            # uses
+            if "uses" in step:
+                new_step["uses"] = step["uses"]
 
-            fixed_steps.append(step)
+            # with
+            if "with" in step:
+                new_step["with"] = step["with"]
+
+            # run
+            if "run" in step:
+                run_val = step["run"]
+                if isinstance(run_val, str) and "\n" in run_val:
+                    # многострочный блок
+                    new_step["run"] = run_val.strip("\n")
+                else:
+                    new_step["run"] = run_val
+
+            # target / needs / env и т.д.
+            for k, v in step.items():
+                if k in ("name", "uses", "with", "run"):
+                    continue
+                new_step[k] = v
+
+            fixed_steps.append(new_step)
+
         job["steps"] = fixed_steps
 
     return data
+
 
 
 
