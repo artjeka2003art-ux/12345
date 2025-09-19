@@ -20,33 +20,22 @@ jobs:
       run: cargo test --verbose
     - name: build_image
       run: docker build -t myapp:latest .
-      target: host
-      needs:
-      - test
     - name: push_image
       run: docker push myapp:latest
-      target: host
-      needs:
-      - build_image
     - name: push_image
       run: docker push myapp:latest
-      target: host
-      needs:
-      - build_image
+    - name: push_image
+      run: docker push myapp:latest
     - name: coverage
       run: go test -coverprofile=coverage.out ./... && go tool cover -func=coverage.out
         && go tool cover -html=coverage.out -o coverage.html
-      target: auto
-      needs:
-      - test
     - name: build_image
       run: docker build -t myapp:latest .
-      target: host
-      needs:
-      - test
     - name: coverage
       run: go test -coverprofile=coverage.out ./... && go tool cover -func=coverage.out
         && go tool cover -html=coverage.out -o coverage.html
-      target: auto
-      needs:
-      - test
+    - name: build_image
+      run: docker build -t myapp:latest .
+    - name: coverage
+      run: go test -coverprofile=coverage.out ./... && go tool cover -func=coverage.out
+        && go tool cover -html=coverage.out -o coverage.html
