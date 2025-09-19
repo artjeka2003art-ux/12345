@@ -30,15 +30,22 @@ def _list_workflows() -> list[Path]:
     return sorted([x for x in p.glob("*.yml") if x.is_file()])
 
 def _normalize_yaml_root(data):
-    # Если YAML содержит несколько документов (list), берём первый, который является dict.
+    # Если YAML загрузился как tuple (ok, data) — вытащим data
+    if isinstance(data, tuple) and len(data) == 2:
+        data = data[1]
+
+    # Если multi-doc: берём первый словарь
     if isinstance(data, list):
         for doc in data:
             if isinstance(doc, dict):
                 return doc
-        raise ValueError("YAML root должен быть объектом (mapping), а не списком без документов-object.")
+        raise ValueError("YAML содержит несколько документов, но ни один не является объектом (mapping).")
+
     if not isinstance(data, dict):
-        raise ValueError("YAML root должен быть объектом.")
+        raise ValueError(f"YAML root должен быть объектом (dict), а не {type(data).__name__}")
+
     return data
+
 
 def _read_workflow_name(path: Path) -> str:
     ok, data = load_yaml_preserve(str(path))
