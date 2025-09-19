@@ -191,7 +191,6 @@ def ci_edit(features_text: str, filename: Optional[str] = None, *, auto_yes: boo
 
     notes = apply_ops(data, ops)
     data = _normalize_workflow_yaml(data)
-    data = _normalize_workflow_yaml(data)
     saved, backup = _force_dump_yaml(str(wf_path), data, auto_yes=auto_yes)
     if not saved:
         return
@@ -330,7 +329,8 @@ def ci_fix_last(filename: Optional[str] = None, *, auto_yes: bool = False, autop
         console.print(Panel("\n".join(notes), title="Изменения", border_style="cyan"))
 
     data = _normalize_workflow_yaml(data)
-    saved, backup = preview_and_write_yaml(str(wf_path), data, auto_yes=auto_yes)
+    saved, backup = _force_dump_yaml(str(wf_path), data, auto_yes=auto_yes)
+    
     if not saved:
         return
 
