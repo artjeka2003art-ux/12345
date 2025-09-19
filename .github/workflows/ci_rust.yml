@@ -7,37 +7,16 @@ jobs:
     - name: Setup Rust
       uses: dtolnay/rust-toolchain@stable
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --release
     - name: Test
-      run: cargo test --verbose
+      run: cargo test
     - name: build_image
       run: docker build -t myapp:latest .
     - name: push_image
       run: docker push myapp:latest
-    - name: push_image
-      run: docker push myapp:latest
-    - name: push_image
-      run: docker push myapp:latest
-    - name: push_image
-      run: docker push myapp:latest
     - name: coverage
-      run: go test -coverprofile=coverage.out ./... && go tool cover -func=coverage.out
-        && go tool cover -html=coverage.out -o coverage.html
-    - name: build_image
-      run: docker build -t myapp:latest .
-    - name: coverage
-      run: go test -coverprofile=coverage.out ./... && go tool cover -func=coverage.out
-        && go tool cover -html=coverage.out -o coverage.html
-    - name: build_image
-      run: docker build -t myapp:latest .
-    - name: coverage
-      run: go test -coverprofile=coverage.out ./... && go tool cover -func=coverage.out
-        && go tool cover -html=coverage.out -o coverage.html
-    - name: build_image
-      run: docker build -t myapp:latest .
-    - name: coverage
-      run: go test -coverprofile=coverage.out ./... && go tool cover -func=coverage.out
-        && go tool cover -html=coverage.out -o coverage.html
+      run: cargo llvm-cov --all-features --workspace --summary-only && cargo llvm-cov
+        --all-features --workspace --lcov --output-path lcov.info
 'on':
   push:
     branches:
