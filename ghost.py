@@ -993,6 +993,7 @@ def print_help():
     t.add_row("ci list", "Список workflows в репозитории")
     t.add_row("ci run [имя.yml]", "Запустить workflow (по умолчанию первый)")
     t.add_row('ci edit "..." [--file <ci.yml>] [--yes] [--no-push]', "Правки YAML естественным языком (diff-превью, автопуш)")
+    t.add_row("", "Если .github/workflows содержит несколько файлов — появится меню выбора.")
     t.add_row("ci fix last [--yes] [--no-push]", "ИИ-анализ логов последнего запуска и патч YAML")
     t.add_row("ci logs last", "Показать логи последнего запуска workflow")
     t.add_row("ci init <tpl> [--auto|--as <file.yml>] [--force]", "Создать workflow (по умолчанию .github/workflows/ci.yml)")

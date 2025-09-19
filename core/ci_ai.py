@@ -29,13 +29,81 @@ def _list_workflows() -> list[Path]:
         return []
     return sorted([x for x in p.glob("*.yml") if x.is_file()])
 
+def _normalize_yaml_root(data):
+    # Если YAML содержит несколько документов (list), берём первый, который является dict.
+    if isinstance(data, list):
+        for doc in data:
+            if isinstance(doc, dict):
+                return doc
+        raise ValueError("YAML root должен быть объектом (mapping), а не списком без документов-object.")
+    if not isinstance(data, dict):
+        raise ValueError("YAML root должен быть объектом.")
+    return data
+
+def _read_workflow_name(path: Path) -> str:
+    ok, data = load_yaml_preserve(str(path))
+    if not ok:
+        return ""
+    try:
+        data = _normalize_yaml_root(data)
+    except Exception:
+        return ""
+    try:
+        name = data.get("name")
+        return str(name) if name else ""
+    except Exception:
+        return ""
+
+def _present_workflow_menu(items: list[Path]) -> Optional[Path]:
+    if not items:
+        return None
+    if len(items) == 1:
+        return items[0]
+
+    # Покажем нумерованный список с name: из YAML
+    lines = []
+    for i, p in enumerate(items, 1):
+        human = _read_workflow_name(p)
+        tail = f" — {human}" if human else ""
+        lines.append(f"[{i}] {p.name}{tail}")
+    console.print(Panel("\n".join(lines), title="Найдено несколько workflow", border_style="magenta"))
+
+    try:
+        choice = input("Выбери номер файла (Enter = 1, можно ввести имя файла): ").strip()
+    except EOFError:
+        choice = ""
+
+    if choice == "":
+        return items[0]
+
+    # Можно ввести номер
+    if choice.isdigit():
+        idx = int(choice)
+        if 1 <= idx <= len(items):
+            return items[idx-1]
+
+    # Или полное/частичное имя файла
+    for p in items:
+        if p.name == choice or p.name.startswith(choice):
+            return p
+
+    console.print(Panel.fit("Не понял выбор — беру первый.", border_style="yellow"))
+    return items[0]
+
+
 def _select_workflow(filename: Optional[str]) -> Optional[Path]:
     if filename:
         path = Path(".github/workflows") / filename
         if path.exists():
             return path
+        # Допускаем, что пользователь ввёл без каталога и расширения
+        p = Path(".github/workflows") / f"{filename}.yml"
+        if p.exists():
+            return p
+
     items = _list_workflows()
-    return items[0] if items else None
+    return _present_workflow_menu(items)
+
 
 def _detect_kind(yaml_data: Any) -> str:
     text = dump_yaml_preserve(yaml_data).lower()
@@ -70,6 +138,11 @@ def ci_edit(features_text: str, filename: Optional[str] = None, *, auto_yes: boo
     ok, data = load_yaml_preserve(str(wf_path))
     if not ok:
         console.print(Panel.fit(f"❌ Не удалось прочитать YAML: {wf_path}", border_style="red"))
+        return
+    try:
+        data = _normalize_yaml_root(data)
+    except Exception as e:
+        console.print(Panel.fit(f"❌ {e}", border_style="red"))
         return
 
     kind = _detect_kind(data)
@@ -130,6 +203,11 @@ def ci_fix_last(filename: Optional[str] = None, *, auto_yes: bool = False, autop
     ok, data = load_yaml_preserve(str(wf_path))
     if not ok:
         console.print(Panel.fit(f"❌ Не удалось прочитать YAML: {wf_path}", border_style="red"))
+        return
+    try:
+        data = _normalize_yaml_root(data)
+    except Exception as e:
+        console.print(Panel.fit(f"❌ {e}", border_style="red"))
         return
 
     kind = _detect_kind(data)
