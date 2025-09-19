@@ -187,7 +187,7 @@ def _normalize_workflow_yaml(data: dict) -> dict:
     # Нормализуем 'workflow_dispatch': null → {}
     if isinstance(data.get("on"), dict):
         od = data["on"]
-        if od.get("workflow_dispatch") is None:
+        if od.get("workflow_dispatch") in (None, "", False):
             od["workflow_dispatch"] = {}
         # преобразуем branches из строки в список
         for sect in ("push", "pull_request"):
