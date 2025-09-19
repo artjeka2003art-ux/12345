@@ -172,6 +172,7 @@ def ci_edit(features_text: str, filename: Optional[str] = None, *, auto_yes: boo
         return
 
     notes = apply_ops(data, ops)
+    data = _normalize_workflow_yaml(data)
     saved, backup = preview_and_write_yaml(str(wf_path), data, auto_yes=auto_yes)
     if not saved:
         return
@@ -193,6 +194,29 @@ _ERR_PATTERNS = [
     (r"Command\s+'?npm'? not found", 
         lambda kind: [{"op": "set_run", "step": {"name": "test"}, "value": "npm ci && npm test --silent"}] if kind=="node" else []),
 ]
+
+def _normalize_workflow_yaml(data: dict) -> dict:
+    # Убираем случайный ключ 'true' на верхнем уровне
+    if "true" in data and isinstance(data["true"], dict):
+        # перенесём его содержимое в 'on'
+        if "on" not in data:
+            data["on"] = data["true"]
+        data.pop("true", None)
+
+    # Чиним шаги: если run — это строка с \n, делаем многострочный блок
+    for job in data.get("jobs", {}).values():
+        if not isinstance(job, dict):
+            continue
+        steps = job.get("steps", [])
+        for step in steps:
+            if isinstance(step, dict) and isinstance(step.get("run"), str):
+                val = step["run"]
+                if "\n" in val:
+                    # убираем лишние кавычки/экранирования
+                    step["run"] = val.strip("\n")
+
+    return data
+
 
 def _extract_error_tail(logs: str) -> str:
     lines = [l for l in logs.splitlines() if l.strip()]
@@ -253,7 +277,8 @@ def ci_fix_last(filename: Optional[str] = None, *, auto_yes: bool = False, autop
     notes = apply_ops(data, ops)
     if notes:
         console.print(Panel("\n".join(notes), title="Изменения", border_style="cyan"))
-
+        
+    data = _normalize_workflow_yaml(data)
     saved, backup = preview_and_write_yaml(str(wf_path), data, auto_yes=auto_yes)
     if not saved:
         return
