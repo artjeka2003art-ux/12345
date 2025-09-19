@@ -3,6 +3,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+    - name: lint
+      run: black --check .
     - name: Checkout
       uses: actions/checkout@v4
     - name: Set up Python
