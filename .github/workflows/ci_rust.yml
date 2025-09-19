@@ -1,12 +1,4 @@
 name: CI (Rust)
-true:
-  push:
-    branches:
-    - main
-  pull_request:
-    branches:
-    - main
-  workflow_dispatch: null
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -26,6 +18,8 @@ jobs:
       run: docker push myapp:latest
     - name: push_image
       run: docker push myapp:latest
+    - name: push_image
+      run: docker push myapp:latest
     - name: coverage
       run: go test -coverprofile=coverage.out ./... && go tool cover -func=coverage.out
         && go tool cover -html=coverage.out -o coverage.html
@@ -39,3 +33,16 @@ jobs:
     - name: coverage
       run: go test -coverprofile=coverage.out ./... && go tool cover -func=coverage.out
         && go tool cover -html=coverage.out -o coverage.html
+    - name: build_image
+      run: docker build -t myapp:latest .
+    - name: coverage
+      run: go test -coverprofile=coverage.out ./... && go tool cover -func=coverage.out
+        && go tool cover -html=coverage.out -o coverage.html
+'on':
+  push:
+    branches:
+    - main
+  pull_request:
+    branches:
+    - main
+  workflow_dispatch: {}
