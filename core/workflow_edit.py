@@ -120,8 +120,6 @@ def apply_ops(data: Any, ops: List[Dict[str, Any]]) -> List[str]:
       (и пишем предупреждение в msgs)
     """
     msgs: List[str] = []
-    steps, extra = _ensure_steps(data)
-    msgs += extra
     jobs = data.get("jobs", {})
     job = None
 
