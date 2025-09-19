@@ -162,10 +162,11 @@ def _detect_kind(yaml_data: Any) -> str:
 def _normalize_workflow_yaml(data: dict) -> dict:
     """
     Приводим структуру к валидной для GitHub Actions:
-      - корневой ключ событий: on (иногда превращается в булев True → потом сериализуется как 'true:')
-      - удаляем служебные поля из шагов (target/needs — это не GHA)
-      - чиним run (убираем лишние \n в конце)
+      - корневой ключ событий: on
+      - удаляем служебные поля из шагов
+      - чиним run
       - убираем дубли шагов по имени
+      - гарантируем workflow_dispatch: {}
     """
     # ---- 1) Корень: on
     if "true" in data:
@@ -179,20 +180,20 @@ def _normalize_workflow_yaml(data: dict) -> dict:
         data.pop(True, None)  # type: ignore[arg-type]
 
     if "on" not in data:
-        data["on"] = {"workflow_dispatch": {}}
+        data["on"] = {}
 
-    # Нормализуем 'workflow_dispatch': null → {}
-    if isinstance(data.get("on"), dict):
-        od = data["on"]
-        if not isinstance(od.get("workflow_dispatch"), dict):
-            od["workflow_dispatch"] = {}
+    # --- Гарантия: workflow_dispatch всегда есть и всегда dict
+    if not isinstance(data["on"], dict):
+        data["on"] = {}
+    if not isinstance(data["on"].get("workflow_dispatch"), dict):
+        data["on"]["workflow_dispatch"] = {}
 
-        # Преобразуем branches: str → list[str]
-        for sect in ("push", "pull_request"):
-            if isinstance(od.get(sect), dict):
-                br = od[sect].get("branches")
-                if isinstance(br, str):
-                    od[sect]["branches"] = [br]
+    # Нормализуем branches
+    for sect in ("push", "pull_request"):
+        if isinstance(data["on"].get(sect), dict):
+            br = data["on"][sect].get("branches")
+            if isinstance(br, str):
+                data["on"][sect]["branches"] = [br]
 
     # ---- 2) Шаги: чистим служебные поля, run и дубликаты
     jobs = data.get("jobs")
@@ -210,8 +211,6 @@ def _normalize_workflow_yaml(data: dict) -> dict:
                     continue
 
                 new_step: dict = {}
-
-                # порядок ключей: name → uses → with → run → остальное
                 if "name" in step:
                     new_step["name"] = step["name"]
                 if "uses" in step:
@@ -225,7 +224,6 @@ def _normalize_workflow_yaml(data: dict) -> dict:
                     else:
                         new_step["run"] = run_val
 
-                # остальные поля (кроме служебных)
                 for k, v in step.items():
                     if k in ("name", "uses", "with", "run", "target", "needs"):
                         continue
@@ -233,7 +231,7 @@ def _normalize_workflow_yaml(data: dict) -> dict:
 
                 fixed.append(new_step)
 
-            # --- убираем дубликаты шагов по имени
+            # Убираем дубли шагов
             seen = set()
             unique = []
             for st in fixed:
@@ -243,31 +241,25 @@ def _normalize_workflow_yaml(data: dict) -> dict:
                 if nm:
                     seen.add(nm)
                 unique.append(st)
-
             job["steps"] = unique
 
     return data
 
 
-
 def _force_dump_yaml(path: str, data: dict) -> tuple[bool, str]:
-    """Жёсткий дамп YAML без поломанных отступов + правильный порядок ключей."""
+    """Жёсткий дамп YAML с фиксом workflow_dispatch."""
     try:
-        # Гарантируем порядок: name → on → jobs → остальное
-        ordered = {}
-        for k in ("name", "on", "jobs"):
-            if k in data:
-                ordered[k] = data[k]
-        for k, v in data.items():
-            if k not in ordered:
-                ordered[k] = v
-
         text = yaml.safe_dump(
-        ordered,
-        sort_keys=False,
-        default_flow_style=None,  # 👉 ключ
-        indent=2
-    )
+            data,
+            sort_keys=False,
+            default_flow_style=False,
+            indent=2
+        )
+
+        # FIX: нормализуем workflow_dispatch
+        text = text.replace("workflow_dispatch:\n", "workflow_dispatch: {}\n")
+        text = text.replace("workflow_dispatch: null", "workflow_dispatch: {}")
+
         backup = f"{path}.bak"
         with open(backup, "w") as f:
             f.write(text)
@@ -277,6 +269,8 @@ def _force_dump_yaml(path: str, data: dict) -> tuple[bool, str]:
     except Exception as e:
         console.print(Panel.fit(f"❌ Ошибка дампа YAML: {e}", border_style="red"))
         return False, ""
+
+
 
 
 
