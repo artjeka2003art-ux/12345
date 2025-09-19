@@ -147,6 +147,24 @@ def _detect_kind(yaml_data: Any) -> str:
         return "android"
     return "python"
 
+import yaml
+
+def _force_dump_yaml(path: str, data: dict, auto_yes: bool = False) -> tuple[bool, str]:
+    """Сохраняем YAML с нормальными отступами (особенно для steps)."""
+    text = yaml.safe_dump(
+        data,
+        sort_keys=False,
+        default_flow_style=False,
+        indent=2
+    )
+    backup = f"{path}.bak"
+    with open(backup, "w") as f:
+        f.write(text)
+    with open(path, "w") as f:
+        f.write(text)
+    return True, backup
+
+
 def ci_edit(features_text: str, filename: Optional[str] = None, *, auto_yes: bool = False, autopush: bool = True) -> None:
     wf_path = _select_workflow(filename)
     if not wf_path:
@@ -173,7 +191,8 @@ def ci_edit(features_text: str, filename: Optional[str] = None, *, auto_yes: boo
 
     notes = apply_ops(data, ops)
     data = _normalize_workflow_yaml(data)
-    saved, backup = preview_and_write_yaml(str(wf_path), data, auto_yes=auto_yes)
+    data = _normalize_workflow_yaml(data)
+    saved, backup = _force_dump_yaml(str(wf_path), data, auto_yes=auto_yes)
     if not saved:
         return
 
