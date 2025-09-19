@@ -122,6 +122,29 @@ def apply_ops(data: Any, ops: List[Dict[str, Any]]) -> List[str]:
     msgs: List[str] = []
     steps, extra = _ensure_steps(data)
     msgs += extra
+    jobs = data.get("jobs", {})
+    job = None
+
+    # если операция явно указывает job
+    target_job = None
+    for op in ops or []:
+        if "job" in op:
+            target_job = op["job"]
+            break
+
+    if target_job and target_job in jobs:
+        job = jobs[target_job]
+    else:
+        # иначе берём первый job, где есть steps
+        for name, candidate in jobs.items():
+            if isinstance(candidate, dict) and "steps" in candidate:
+                job = candidate
+                break
+
+    if not job or "steps" not in job:
+        return ["В YAML отсутствует корректный список steps."]
+
+    steps = job["steps"]
 
     def _coerce_step_ref(step_ref):
         """Разрешаем step_ref быть строкой — превращаем в {'name': <str>}."""
