@@ -251,28 +251,33 @@ def _normalize_workflow_yaml(data: dict) -> dict:
 
 
 def _force_dump_yaml(path: str, data: dict) -> tuple[bool, str]:
-    """
-    Жёсткий дамп YAML без поломанных отступов. Дополнительно фиксируем представление строк,
-    чтобы ключ 'on' не превращался обратно в true: при странных обстоятельствах.
-    """
+    """Жёсткий дамп YAML без поломанных отступов + правильный порядок ключей."""
     try:
-        # Представитель строк — оставляем как есть; главное, что ключ 'on' теперь строковый,
-        # а не булев True, поэтому safe_dump запишет 'on:'.
+        # Гарантируем порядок: name → on → jobs → остальное
+        ordered = {}
+        for k in ("name", "on", "jobs"):
+            if k in data:
+                ordered[k] = data[k]
+        for k, v in data.items():
+            if k not in ordered:
+                ordered[k] = v
+
         text = yaml.safe_dump(
-            data,
+            ordered,
             sort_keys=False,
             default_flow_style=False,
-            indent=2,
+            indent=2
         )
         backup = f"{path}.bak"
-        with open(backup, "w", encoding="utf-8") as f:
+        with open(backup, "w") as f:
             f.write(text)
-        with open(path, "w", encoding="utf-8") as f:
+        with open(path, "w") as f:
             f.write(text)
         return True, backup
     except Exception as e:
         console.print(Panel.fit(f"❌ Ошибка дампа YAML: {e}", border_style="red"))
         return False, ""
+
 
 
 # ------------------------------ CI features ------------------------------
