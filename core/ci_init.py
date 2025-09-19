@@ -100,14 +100,14 @@ def init_ci(target: str = "python", force: bool = False, outfile: str | None = N
         for line in new_text.splitlines():
             lines.append(line)
             if line.strip().startswith("pull_request:") and not inserted:
-                lines.append("  workflow_dispatch:")
+                lines.append("  workflow_dispatch: {}")
                 inserted = True
         if not inserted:
             patched = []
             for line in lines:
                 patched.append(line)
                 if line.strip().startswith("on:") and not inserted:
-                    patched.append("  workflow_dispatch:")
+                    patched.append("  workflow_dispatch: {}")
                     inserted = True
             lines = patched
         new_text = "\n".join(lines)
