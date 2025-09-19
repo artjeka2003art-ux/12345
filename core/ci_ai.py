@@ -168,28 +168,26 @@ def _normalize_workflow_yaml(data: dict) -> dict:
       - убираем дубли шагов по имени
     """
     # ---- 1) Корень: on
-    # случай 1: ключ 'true' как строка
     if "true" in data:
         if "on" not in data:
             data["on"] = data["true"]
         data.pop("true", None)
 
-    # случай 2: ключ булев True (YAML 1.1 интерпретирует on: как True)
-    if True in data:  # type: ignore[operator]
+    if True in data:  # YAML 1.1 иногда превращает on: в True
         if "on" not in data:
             data["on"] = data[True]  # type: ignore[index]
         data.pop(True, None)  # type: ignore[arg-type]
 
-    # если on отсутствует, добавим минимальный
     if "on" not in data:
         data["on"] = {"workflow_dispatch": {}}
 
     # Нормализуем 'workflow_dispatch': null → {}
     if isinstance(data.get("on"), dict):
         od = data["on"]
-        if od.get("workflow_dispatch") in (None, "", False):
+        if not isinstance(od.get("workflow_dispatch"), dict):
             od["workflow_dispatch"] = {}
-        # преобразуем branches из строки в список
+
+        # Преобразуем branches: str → list[str]
         for sect in ("push", "pull_request"):
             if isinstance(od.get(sect), dict):
                 br = od[sect].get("branches")
@@ -245,9 +243,11 @@ def _normalize_workflow_yaml(data: dict) -> dict:
                 if nm:
                     seen.add(nm)
                 unique.append(st)
+
             job["steps"] = unique
 
     return data
+
 
 
 def _force_dump_yaml(path: str, data: dict) -> tuple[bool, str]:
@@ -263,11 +263,11 @@ def _force_dump_yaml(path: str, data: dict) -> tuple[bool, str]:
                 ordered[k] = v
 
         text = yaml.safe_dump(
-            ordered,
-            sort_keys=False,
-            default_flow_style=False,
-            indent=2
-        )
+        ordered,
+        sort_keys=False,
+        default_flow_style=None,  # 👉 ключ
+        indent=2
+    )
         backup = f"{path}.bak"
         with open(backup, "w") as f:
             f.write(text)
