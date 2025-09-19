@@ -17,12 +17,12 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi'
     - name: Run tests
       run: pytest -q || true
+    - name: coverage
+      run: coverage run -m pytest && coverage report
     - name: build_image
       run: docker build -t myapp:latest .
     - name: push_image
       run: docker push myapp:latest
-    - name: coverage
-      run: coverage run -m pytest && coverage report
 'on':
   push:
     branches:
