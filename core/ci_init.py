@@ -6,7 +6,7 @@ from pathlib import Path
 from rich.panel import Panel
 from rich.console import Console
 import difflib
-
+import re
 console = Console()
 
 TEMPLATES = {
@@ -112,8 +112,8 @@ def init_ci(target: str = "python", force: bool = False, outfile: str | None = N
             lines = patched
         new_text = "\n".join(lines)
     else:
-        # если есть, но пустой → исправляем
-        new_text = new_text.replace("workflow_dispatch:\n", "workflow_dispatch: {}\n")
+        # если уже есть, но пустой — превращаем в {}
+        new_text = re.sub(r"workflow_dispatch:\s*\n", "workflow_dispatch: {}\n", new_text)
         new_text = new_text.replace("workflow_dispatch:", "workflow_dispatch: {}")
 
     # если был старый текст и включён force — показываем diff
