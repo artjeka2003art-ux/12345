@@ -142,15 +142,17 @@ def ci_edit(features_text: str, filename: Optional[str] = None, *, auto_yes: boo
         console.print(Panel.fit("❌ .github/workflows/*.yml не найдено.", border_style="red"))
         return
 
-    ok, data = load_yaml_preserve(str(wf_path))
+    ok, raw = load_yaml_preserve(str(wf_path))
     if not ok:
         console.print(Panel.fit(f"❌ Не удалось прочитать YAML: {wf_path}", border_style="red"))
         return
+
     try:
-        data = _normalize_yaml_root(data)
+        data = _normalize_yaml_root(raw)
     except Exception as e:
         console.print(Panel.fit(f"❌ {e}", border_style="red"))
         return
+
 
     kind = _detect_kind(data)
     ops = build_ops_from_nl(kind, features_text)
@@ -207,12 +209,13 @@ def ci_fix_last(filename: Optional[str] = None, *, auto_yes: bool = False, autop
         console.print(Panel.fit("❌ Не найден workflow для правки (.github/workflows/*.yml).", border_style="red"))
         return
 
-    ok, data = load_yaml_preserve(str(wf_path))
+    ok, raw = load_yaml_preserve(str(wf_path))
     if not ok:
         console.print(Panel.fit(f"❌ Не удалось прочитать YAML: {wf_path}", border_style="red"))
         return
+
     try:
-        data = _normalize_yaml_root(data)
+        data = _normalize_yaml_root(raw)
     except Exception as e:
         console.print(Panel.fit(f"❌ {e}", border_style="red"))
         return
