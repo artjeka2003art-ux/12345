@@ -112,9 +112,7 @@ def init_ci(target: str = "python", force: bool = False, outfile: str | None = N
             lines = patched
         new_text = "\n".join(lines)
     else:
-        # если уже есть, но пустой — превращаем в {}
         new_text = re.sub(r"workflow_dispatch:\s*\n", "workflow_dispatch: {}\n", new_text)
-        new_text = new_text.replace("workflow_dispatch:", "workflow_dispatch: {}")
 
     # если был старый текст и включён force — показываем diff
     if old_text is not None and force:
