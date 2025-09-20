@@ -6,6 +6,7 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch: {}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -14,8 +15,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build Docker image
+      - name: build
         run: docker build -t myapp:ci .
 
-      - name: Run container
+      - name: run
         run: docker run --rm myapp:ci
+
