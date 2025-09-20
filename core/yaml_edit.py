@@ -153,7 +153,7 @@ def build_ops_from_nl(kind: str, features_text: str) -> list[dict]:
     text = (" " + (features_text or "") + " ").lower()
 
     def has(*words: str) -> bool:
-        tokens = re.split(r"[\s\+\.,;]+", features_text.lower())
+        tokens = re.split(r"[\s\+\.,;]+", (features_text or "").lower().strip())
         return any(word.lower() in tokens for word in words)
 
     k = (kind or "").strip().lower()
@@ -628,15 +628,10 @@ def build_ops_from_nl(kind: str, features_text: str) -> list[dict]:
     # -------- Docker ----------
    
     elif kind == "docker":
-    # нормализуем текст запроса (чтобы ловить "build + push")
-        text_low = features_text.lower().replace("+", " ")
-
-        def has(*words: str) -> bool:
-            return any(w.lower() in text_low for w in words)
-
-        # key=value из фразы
+        # --- разбор параметров из фразы ---
         kv = {}
-        for tok in text_low.split():
+        tokens = re.split(r"[\s\+\.,;]+", features_text.lower()) if features_text else []
+        for tok in tokens:
             if "=" in tok:
                 k, v = tok.split("=", 1)
                 kv[k.strip().lower()] = v.strip()
@@ -647,11 +642,11 @@ def build_ops_from_nl(kind: str, features_text: str) -> list[dict]:
         context = kv.get("context", ".")
         platform = kv.get("platform", "")
         registry = kv.get("registry", "")
-        use_buildx = has("buildx", "platform") or bool(platform)
+        use_buildx = ("buildx" in tokens or "platform" in tokens or bool(platform))
 
         img_ref = f"{image}:{tag}"
 
-        # BUILD
+        # --- BUILD ---
         if use_buildx:
             plat = f"--platform {platform} " if platform else ""
             build_cmd = f"docker buildx build {plat}-t {img_ref} -f {dockerfile} {context} --load"
@@ -660,13 +655,13 @@ def build_ops_from_nl(kind: str, features_text: str) -> list[dict]:
 
         ops.append({
             "op": "insert_after",
-            "step": {"name": "Checkout"},
+            "step": {"name": "Checkout"},   # якорь = после checkout
             "name": "build",
             "value": {"run": build_cmd, "target": "host"}
         })
 
-        # LOGIN (если попросили)
-        if has("login", "логин"):
+        # --- LOGIN (по запросу) ---
+        if "login" in tokens or "логин" in tokens:
             login_cmd = (
                 f'echo "$DOCKER_PASSWORD" | docker login {registry} -u "$DOCKER_USERNAME" --password-stdin'
                 if registry else
@@ -679,8 +674,8 @@ def build_ops_from_nl(kind: str, features_text: str) -> list[dict]:
                 "value": {"run": login_cmd, "target": "host"}
             })
 
-        # RUN (по желанию)
-        if has("run", "запусти"):
+        # --- RUN (по запросу) ---
+        if "run" in tokens or "запусти" in tokens:
             ops.append({
                 "op": "insert_after",
                 "step": {"name": "build"},
@@ -688,8 +683,8 @@ def build_ops_from_nl(kind: str, features_text: str) -> list[dict]:
                 "value": {"run": f"docker run --rm {img_ref}", "target": "host"}
             })
 
-        # PUSH
-        if has("push", "пуш", "deploy", "деплой", "docker hub") or "image" in kv or "tag" in kv:
+        # --- PUSH ---
+        if "push" in tokens or "пуш" in tokens or "deploy" in tokens or "деплой" in tokens:
             ops.append({
                 "op": "insert_after",
                 "step": {"name": "build"},
