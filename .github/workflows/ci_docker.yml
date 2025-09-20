@@ -1,21 +1,19 @@
 name: CI (Docker)
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch: {}
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: docker build -t myapp:ci .
-
-      - name: Run container
-        run: docker run --rm myapp:ci
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Build Docker image
+      run: docker build -t myapp:ci .
+    - name: Run container
+      run: docker run --rm myapp:ci
+'on':
+  push:
+    branches:
+    - main
+  pull_request:
+    branches:
+    - main
+  workflow_dispatch: {}
