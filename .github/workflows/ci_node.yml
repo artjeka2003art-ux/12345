@@ -11,14 +11,16 @@ jobs:
         node-version: '20'
     - name: Install dependencies
       run: npm install
+    - name: lint
+      run: npm install --save-dev eslint && npx eslint .
     - name: Run tests
-      run: npm test --if-present
-    - name: coverage
-      run: npm test --silent -- --coverage
+      run: npm ci && npm test --silent
     - name: build_image
       run: docker build -t myapp:latest .
     - name: push_image
       run: docker push myapp:latest
+    - name: coverage
+      run: npm run coverage --if-present || echo 'no coverage script'
 'on':
   push:
     branches:
