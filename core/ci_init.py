@@ -52,7 +52,8 @@ def git_auto_commit(file: str, message: str) -> str | None:
         return None
 
 
-def init_ci(target: str = "python", force: bool = False, outfile: str | None = None, autopush: bool = False) -> str:
+def init_ci(target: str = "python", force: bool = False, outfile: str | None = None, autopush: bool = True) -> str:
+
     """
     Создаёт .github/workflows/*.yml из шаблона.
     target: python|node|go|docker|java|dotnet|rust|php|ruby|android|multi

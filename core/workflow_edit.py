@@ -5,6 +5,8 @@ from ruamel.yaml.comments import CommentedMap
 import re
 from typing import Any, Dict, List, Tuple, Optional
 
+
+
 # Ядро редактирования YAML с сохранением форматирования делаем поверх ruamel'овских структур,
 # но код работает и с обычными dict/list (fallback).
 def _is_mapping(x):  # CommentedMap или dict
@@ -118,23 +120,35 @@ def _resolve_step_ref(steps: list[dict], step_ref: dict | str) -> tuple[dict, in
     raise ValueError(f"Неподдерживаемый step_ref: {step_ref}")
 
 
+# --- алиасы шагов ---
+ALIASES = {
+    "run tests": "test",
+    "tests": "test",
+    "pytest": "test",
+    "unit tests": "test",
+    "lint check": "lint",
+    "black": "lint",
+    "format": "lint",
+    "coverage report": "coverage",
+    "cov": "coverage",
+}
+
+def _normalize_step_name(name: str | None) -> str:
+    if not name:
+        return ""
+    return ALIASES.get(name.lower().strip(), name.strip())
+
+
 def apply_ops(data: Any, ops: List[Dict[str, Any]]) -> List[str]:
     """
     Применяет операции к YAML-объекту workflow.
     Возвращает список сообщений/предупреждений для пользователя.
-
-    Улучшения:
-    - принимаем step как {"name": "..."} / {"index": N} ИЛИ просто строку "имя_шага"
-    - insert_after / insert_before: если якорь не найден — мягкий фоллбек:
-        * insert_before  -> вставляем в начало
-        * insert_after   -> вставляем в конец
-      (и пишем предупреждение в msgs)
     """
     msgs: List[str] = []
     jobs = data.get("jobs", {})
     job = None
 
-    # если операция явно указывает job
+    # выбираем job
     target_job = None
     for op in ops or []:
         if "job" in op:
@@ -144,8 +158,7 @@ def apply_ops(data: Any, ops: List[Dict[str, Any]]) -> List[str]:
     if target_job and target_job in jobs:
         job = jobs[target_job]
     else:
-        # иначе берём первый job, где есть steps
-        for name, candidate in jobs.items():
+        for _, candidate in jobs.items():
             if isinstance(candidate, dict) and "steps" in candidate:
                 job = candidate
                 break
@@ -156,11 +169,31 @@ def apply_ops(data: Any, ops: List[Dict[str, Any]]) -> List[str]:
     steps = job["steps"]
 
     def _coerce_step_ref(step_ref):
-        """Разрешаем step_ref быть строкой — превращаем в {'name': <str>}."""
         if isinstance(step_ref, str):
             return {"name": step_ref}
         return step_ref
 
+    def _resolve_step_ref(steps, step_ref):
+        if not step_ref:
+            raise ValueError("step_ref пуст")
+
+        if "index" in step_ref:
+            idx = step_ref["index"]
+            if isinstance(idx, int) and 0 <= idx < len(steps):
+                return steps[idx], idx
+            raise ValueError(f"Индекс шага вне диапазона: {idx}")
+
+        if "name" in step_ref:
+            target = _normalize_step_name(step_ref["name"])
+            for i, st in enumerate(steps):
+                nm = _normalize_step_name(st.get("name"))
+                if nm == target:
+                    return st, i
+            raise ValueError(f"Шаг с именем '{step_ref['name']}' не найден")
+
+        raise ValueError("step_ref не содержит index/name")
+
+    # --- применяем операции ---
     for op in ops or []:
         try:
             kind = str(op.get("op") or "").strip()
@@ -168,7 +201,6 @@ def apply_ops(data: Any, ops: List[Dict[str, Any]]) -> List[str]:
                 msgs.append("пропущена операция без поля 'op'")
                 continue
 
-            # ---- адресация шага (если нужна) ----
             step_ref = _coerce_step_ref(op.get("step"))
             step = None
             step_idx = None
@@ -176,217 +208,41 @@ def apply_ops(data: Any, ops: List[Dict[str, Any]]) -> List[str]:
                 try:
                     step, step_idx = _resolve_step_ref(steps, step_ref)
                 except Exception as e:
-                    # Для операций где адрес шага обязателен — сообщим и продолжим
-                    # Для вставок попробуем фоллбек ниже
                     step, step_idx = None, None
-                    # Не будем сразу падать: часть операций умеем выполнить и без точного индекса
+                    msgs.append(f"ошибка операции {op}: {e}")
 
-            # ---- простые сеттеры шага ----
+            # === операции ===
             if kind == "set_run":
                 if step is None:
-                    raise ValueError("Операция не содержит index/name для шага.")
+                    raise ValueError("нет index/name для set_run")
                 step["run"] = str(op.get("value"))
 
-            elif kind == "set_target":
-                if step is None:
-                    raise ValueError("Операция не содержит index/name для шага.")
-                tgt = str(op.get("value")).lower().strip()
-                if tgt not in ("auto", "host", "docker"):
-                    msgs.append(f"неверный target '{tgt}' — оставлен без изменений")
-                else:
-                    step["target"] = tgt
-
-            elif kind == "set_timeout":
-                if step is None:
-                    raise ValueError("Операция не содержит index/name для шага.")
-                step["timeout"] = _parse_duration_to_string(str(op.get("value")))
-
-            elif kind == "set_if":
-                if step is None:
-                    raise ValueError("Операция не содержит index/name для шага.")
-                step["if"] = str(op.get("value"))
-
-            elif kind == "set_cwd":
-                if step is None:
-                    raise ValueError("Операция не содержит index/name для шага.")
-                step["cwd"] = str(op.get("value"))
-
-            elif kind == "set_env":
-                if step is None:
-                    raise ValueError("Операция не содержит index/name для шага.")
-                env = step.get("env")
-                if not _is_mapping(env):
-                    env = {}
-                env.update(_coerce_env(op.get("value")))
-                step["env"] = env
-
-            elif kind == "unset_env":
-                if step is None:
-                    raise ValueError("Операция не содержит index/name для шага.")
-                k = str(op.get("key"))
-                env = step.get("env")
-                if _is_mapping(env) and k in env:
-                    env.pop(k, None)
-
-            elif kind == "set_retries":
-                if step is None:
-                    raise ValueError("Операция не содержит index/name для шага.")
-                r = step.get("retries")
-                if not _is_mapping(r):
-                    r = {}
-                if "max" in op:
-                    r["max"] = int(op["max"])
-                if "delay" in op:
-                    r["delay"] = _parse_duration_to_string(str(op["delay"]))
-                if "backoff" in op:
-                    r["backoff"] = float(op["backoff"])
-                step["retries"] = r
-
-            elif kind == "set_needs":
-                if step is None:
-                    raise ValueError("Операция не содержит index/name для шага.")
-                needs = _ensure_list_str(op.get("value"))
-                step["needs"] = needs
-
-            elif kind == "add_needs":
-                if step is None:
-                    raise ValueError("Операция не содержит index/name для шага.")
-                extra_vals = _ensure_list_str(op.get("value"))
-                base = step.get("needs") or []
-                base = list(dict.fromkeys([*base, *extra_vals]))
-                step["needs"] = base
-
-            elif kind == "del_needs":
-                if step is None:
-                    raise ValueError("Операция не содержит index/name для шага.")
-                delv = set(_ensure_list_str(op.get("value")))
-                base = [x for x in (step.get("needs") or []) if x not in delv]
-                step["needs"] = base
-
-            elif kind == "set_mask":
-                if step is None:
-                    raise ValueError("Операция не содержит index/name для шага.")
-                vals = _ensure_list_str(op.get("value"))
-                step["mask"] = vals
-
-            elif kind == "clear_mask":
-                if step is None:
-                    raise ValueError("Операция не содержит index/name для шага.")
-                step["mask"] = []
-
-            # ---- root env ----
-            elif kind == "set_root_env":
-                root_env = data.get("env")
-                if not _is_mapping(root_env):
-                    root_env = {}
-                root_env.update(_coerce_env(op.get("value")))
-                data["env"] = root_env
-
-            elif kind == "unset_root_env":
-                k = str(op.get("key"))
-                root_env = data.get("env")
-                if _is_mapping(root_env) and k in root_env:
-                    root_env.pop(k, None)
-
-            # ---- операции со списком шагов ----
-            elif kind == "rename_step":
-                if step is None:
-                    raise ValueError("Операция не содержит index/name для шага.")
-                new_name = str(op["new_name"])
-                step["name"] = new_name
-
-            elif kind in ("insert_after", "insert_before"):
-                payload = op.get("value")
-
-                # 1) Строим шаг с гарантированным порядком ключей: name, run, target, ...
-                new_step = CommentedMap()
-
-                # name
-                if _is_mapping(payload) and payload.get("name"):
-                    base_name = str(payload["name"])
-                else:
-                    base_name = None
-                new_step["name"] = op.get("name") or base_name or "step_new"
-
-                # run
-                if isinstance(payload, str):
-                    new_step["run"] = payload
-                elif _is_mapping(payload):
-                    new_step["run"] = payload.get("run", "echo (пустой шаг)")
-                else:
-                    new_step["run"] = "echo (пустой шаг)"
-
-                # target
-                if _is_mapping(payload) and "target" in payload:
-                    new_step["target"] = payload["target"]
-                else:
-                    new_step["target"] = "auto"
-
-                # Остальные поля из payload (кроме name/run/target) — в том порядке, как они шли
-                if _is_mapping(payload):
-                    for k, v in payload.items():
-                        if k in ("name", "run", "target"):
-                            continue
-                        new_step[k] = v
-
-                # 2) Вставка относительно якоря с мягким фоллбеком
+            elif kind == "insert_before":
+                payload = op.get("value", {})
+                new_step = {"name": op.get("name") or "step_new"}
+                new_step["run"] = payload if isinstance(payload, str) else payload.get("run", "echo (пустой шаг)")
                 if step_idx is None:
-                    if kind == "insert_before":
-                        steps.insert(0, new_step)
-                        msgs.append(f"{kind}: anchor не найден — шаг '{new_step['name']}' вставлен в начало.")
-                    else:
-                        steps.append(new_step)
-                        msgs.append(f"{kind}: anchor не найден — шаг '{new_step['name']}' вставлен в конец.")
+                    steps.insert(0, new_step)
+                    msgs.append(f"{kind}: anchor не найден — '{new_step['name']}' в начало.")
                 else:
-                    if kind == "insert_before":
-                        pos = max(0, step_idx - 1)
-                        steps.insert(pos, new_step)
-                    else:  # insert_after
-                        steps.insert(step_idx, new_step)  # step_idx — 1-базовый, вставляем «после»
-                    anchor_label = (step_ref.get("name") if isinstance(step_ref, dict) and "name" in step_ref else step_ref)
-                    msgs.append(f"{kind}: вставлен шаг '{new_step['name']}' относительно '{anchor_label}'")
+                    steps.insert(step_idx, new_step)
+                    msgs.append(f"{kind}: вставлен '{new_step['name']}' перед '{step_ref}'")
 
-
+            elif kind == "insert_after":
+                payload = op.get("value", {})
+                new_step = {"name": op.get("name") or "step_new"}
+                new_step["run"] = payload if isinstance(payload, str) else payload.get("run", "echo (пустой шаг)")
+                if step_idx is None:
+                    steps.append(new_step)
+                    msgs.append(f"{kind}: anchor не найден — '{new_step['name']}' в конец.")
+                else:
+                    steps.insert(step_idx + 1, new_step)
+                    msgs.append(f"{kind}: вставлен '{new_step['name']}' после '{step_ref}'")
 
             elif kind == "delete_step":
                 if step_idx is None:
-                    raise ValueError("Операция не содержит index/name для шага.")
-                steps.pop(step_idx - 1)
-
-            elif kind == "move_before":
-                if step_idx is None:
-                    raise ValueError("Операция не содержит index/name для шага.")
-                anchor_ref = _coerce_step_ref(op.get("anchor"))
-                if not anchor_ref:
-                    raise ValueError("move_before: нет anchor")
-                try:
-                    _, anchor_idx = _resolve_step_ref(steps, anchor_ref)
-                except Exception:
-                    # если якорь не найден — перемещаем в начало
-                    cur = steps.pop(step_idx - 1)
-                    steps.insert(0, cur)
-                    msgs.append("move_before: anchor не найден — шаг перемещён в начало.")
-                else:
-                    cur = steps.pop(step_idx - 1)
-                    insert_pos = max(0, anchor_idx - 1)
-                    steps.insert(insert_pos, cur)
-
-            elif kind == "move_after":
-                if step_idx is None:
-                    raise ValueError("Операция не содержит index/name для шага.")
-                anchor_ref = _coerce_step_ref(op.get("anchor"))
-                if not anchor_ref:
-                    raise ValueError("move_after: нет anchor")
-                try:
-                    _, anchor_idx = _resolve_step_ref(steps, anchor_ref)
-                except Exception:
-                    # если якорь не найден — перемещаем в конец
-                    cur = steps.pop(step_idx - 1)
-                    steps.append(cur)
-                    msgs.append("move_after: anchor не найден — шаг перемещён в конец.")
-                else:
-                    cur = steps.pop(step_idx - 1)
-                    steps.insert(anchor_idx, cur)
+                    raise ValueError("нет index/name для delete_step")
+                steps.pop(step_idx)
 
             else:
                 msgs.append(f"неизвестная операция '{kind}' — пропущена")
@@ -395,3 +251,4 @@ def apply_ops(data: Any, ops: List[Dict[str, Any]]) -> List[str]:
             msgs.append(f"ошибка операции {op}: {e}")
 
     return msgs
+

@@ -123,7 +123,6 @@ def _select_workflow(filename: Optional[str]) -> Optional[Path]:
 
 
 # ------------------------------ YAML helpers ------------------------------
-
 def _detect_kind(yaml_data: Any) -> str:
     """
     Определяет стек по содержимому workflow.
@@ -134,28 +133,56 @@ def _detect_kind(yaml_data: Any) -> str:
     except Exception:
         text = yaml.safe_dump(yaml_data, sort_keys=False).lower()
 
-    # Rust — проверяем первым!
+    # Rust — проверяем первым
     if "dtolnay/rust-toolchain" in text or "actions-rs" in text or "cargo " in text:
         return "rust"
+
+    # Go
     if "actions/setup-go" in text or "\ngo " in text or "go build" in text:
         return "go"
+
+    # Python
     if "actions/setup-python" in text or "pip install" in text or "pytest" in text:
         return "python"
+
+    # Node.js
     if "actions/setup-node" in text or "npm " in text or "yarn " in text or "pnpm " in text:
         return "node"
-    if "docker/login-action" in text or "build-push-action" in text or "uses: docker/" in text:
+
+    # Docker (ловим всё подряд: login, build, push)
+    if (
+        "docker/login-action" in text
+        or "build-push-action" in text
+        or "uses: docker/" in text
+        or "docker build" in text
+        or "docker push" in text
+        or "docker run" in text
+    ):
         return "docker"
+
+    # Java
     if "actions/setup-java" in text or "gradle " in text or "mvn " in text:
         return "java"
+
+    # .NET
     if "actions/setup-dotnet" in text:
         return "dotnet"
+
+    # PHP
     if "setup-php" in text:
         return "php"
+
+    # Ruby
     if "setup-ruby" in text or "bundle " in text:
         return "ruby"
+
+    # Android
     if "android-actions" in text or "gradlew assemble" in text:
         return "android"
+
+    # По умолчанию Python
     return "python"
+
 
 
 

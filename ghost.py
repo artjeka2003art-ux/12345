@@ -773,12 +773,13 @@ from core.ci_init import init_ci, TEMPLATES
 from core.ci_ai import ci_edit, ci_fix_last
 def handle_ci_init(cmdline: str) -> bool:
     """
-    Примеры:
+    Обработка команды:
       - ci init
       - ci init python
       - ci init rust --force
       - ci init node --as ci_node.yml
-      - ci init go --auto --push
+      - ci init go --auto
+      - ci init java --push
     """
     raw = cmdline or ""
     text = _norm_text(raw)
@@ -789,8 +790,7 @@ def handle_ci_init(cmdline: str) -> bool:
     target = "python"
     force = False
     outfile = None
-    auto = False
-    autopush = False
+    autopush = False  # <-- только один флаг
 
     i = 2
     while i < len(parts):
@@ -804,13 +804,12 @@ def handle_ci_init(cmdline: str) -> bool:
             if i + 1 < len(parts):
                 outfile = parts[i + 1]
                 i += 1
-        elif tok == "--auto":
-            auto = True
-        elif tok == "--push":
+        elif tok in ("--auto", "--push"):  # <-- оба включают autopush
             autopush = True
         i += 1
 
-    if auto and not outfile:
+    # если указали --auto, но не указали файл → назначаем дефолтное имя
+    if autopush and not outfile:
         outfile = f"ci_{target}.yml"
 
     print(f"[debug] handle_ci_init: target={target}, force={force}, outfile={outfile}, autopush={autopush}, parts={parts}")

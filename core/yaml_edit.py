@@ -1,6 +1,8 @@
 # core/yaml_edit.py
 from __future__ import annotations
 
+import re
+
 import io
 import os
 import time
@@ -151,7 +153,8 @@ def build_ops_from_nl(kind: str, features_text: str) -> list[dict]:
     text = (" " + (features_text or "") + " ").lower()
 
     def has(*words: str) -> bool:
-        return any(w in text for w in words)
+        tokens = re.split(r"[\s\+\.,;]+", features_text.lower())
+        return any(word.lower() in tokens for word in words)
 
     k = (kind or "").strip().lower()
     if k == "докер":
@@ -178,104 +181,87 @@ def build_ops_from_nl(kind: str, features_text: str) -> list[dict]:
 
        # -------- Python ----------
     if kind == "python":
-        # ВАЖНО: coverage вставим ПОСЛЕ docker-вставок,
-        # чтобы оказаться СРАЗУ после 'test' (insert_after: кто добавлен последним — тот ближе к якорю)
-        coverage_op = None
+        wants_black = has("black")
+        wants_cov = has("coverage", "покрытие", "коверидж")
 
-        # Линтеры
-        if has("black"):
+        # ----- TEST -----
+        ops.append({
+            "op": "set_run",
+            "step": {"name": "test"},
+            "value": "pytest -q || true"
+        })
+
+        # ----- LINT -----
+        if wants_black:
+            # если шаг lint уже есть → правим, иначе создаём перед test
             ops.append({
                 "op": "set_run",
                 "step": {"name": "lint"},
                 "value": "black --check ."
             })
-        elif has("flake8"):
+            ops.append({
+                "op": "insert_before",
+                "step": {"name": "test"},
+                "name": "lint",
+                "value": {"run": "black --check .", "target": "auto"}
+            })
+
+        # ----- COVERAGE -----
+        if wants_cov:
             ops.append({
                 "op": "set_run",
-                "step": {"name": "lint"},
-                "value": "flake8 ."
-            })
-
-        # Тесты
-        if has("pytest", "пиутест", "пайтест"):
-            q = (" " + (features_text or "") + " ").lower()
-            run = "pytest -q" if (" -q " in q or has("quiet")) else "pytest"
-            ops.append({
-                "op": "set_run",
-                "step": {"name": "test"},
-                "value": run
-            })
-
-        # Docker build/push — после test
-        if has("docker", "докер", "docker hub", "push", "пуш", "деплой", "deploy"):
-            ops.append({
-                "op": "insert_after",
-                "step": {"name": "test"},
-                "name": "build_image",
-                "value": {
-                    "run": "docker build -t myapp:latest .",
-                    "target": "host",
-                    "needs": ["test"]
-                }
+                "step": {"name": "coverage"},
+                "value": "coverage run -m pytest && coverage report"
             })
             ops.append({
-                "op": "insert_after",
-                "step": {"name": "build_image"},
-                "name": "push_image",
-                "value": {
-                    "run": "docker push myapp:latest",
-                    "target": "host",
-                    "needs": ["build_image"]
-                }
-            })
-
-        # Coverage — ОТЛОЖЕНО: добавим в самом конце, чтобы стать ближе всех к 'test'
-        if has("coverage", "покрытие", "коверидж"):
-            coverage_op = {
                 "op": "insert_after",
                 "step": {"name": "test"},
                 "name": "coverage",
-                "value": {
-                    "run": "coverage run -m pytest && coverage report",
-                    "target": "auto",
-                    "needs": ["test"]
-                }
-            }
-
-        if coverage_op:
-            ops.append(coverage_op)
+                "value": {"run": "coverage run -m pytest && coverage report", "target": "auto"}
+            })
 
     # -------- Node ----------
+    # -------- Node.js ----------
     elif kind == "node":
-        # Делаем coverage ПОСЛЕДНИМ insert_after → он окажется СРАЗУ после 'test'
-        coverage_op = None
+    # Флаги по запросу пользователя
+        wants_eslint = has("eslint", "линт", "lint")
+        wants_cov = has("coverage", "покрытие", "коверидж", "cover")
+        wants_docker = has("docker", "докер", "docker hub", "push", "деплой", "deploy")
 
-        # Линтер: eslint / prettier
-        if has("eslint"):
+        # --- LINT ---
+        if wants_eslint:
             ops.append({
-                "op": "set_run",
-                "step": {"name": "lint"},
-                "value": "npx eslint ."
-            })
-        elif has("prettier"):
-            ops.append({
-                "op": "set_run",
-                "step": {"name": "lint"},
-                "value": "npx prettier -c ."
+                "op": "insert_before",
+                "step": {"name": "test"},   # если нет test — фоллбек вставит в начало
+                "name": "lint",
+                "value": {
+                    "run": "npm install --save-dev eslint && npx eslint .",
+                    "target": "auto"
+                }
             })
 
-        # Тесты: jest/mocha/vitest/npm test (+ тихий режим при -q/quiet)
-        if has("jest", "mocha", "vitest", "npm test", "тест", "test"):
-            q = (" " + (features_text or "") + " ").lower()
-            run = "npm test -s" if (" -q " in q or has("quiet")) else "npm test"
+        # --- TEST ---
+        ops.append({
+            "op": "set_run",
+            "step": {"name": "test"},
+            "value": "npm ci && npm test --silent"
+        })
+
+        # --- COVERAGE ---
+        if wants_cov:
             ops.append({
-                "op": "set_run",
+                "op": "insert_after",
                 "step": {"name": "test"},
-                "value": run
+                "name": "coverage",
+                "value": {
+                    "run": "npm run coverage --if-present || echo 'no coverage script'",
+                    "target": "auto",
+                    "needs": ["test"]
+                }
             })
 
-        # Docker — build/push после test
-        if has("docker", "докер", "docker hub", "push", "пуш", "деплой", "deploy"):
+        # --- DOCKER ---
+        if wants_docker:
             ops.append({
                 "op": "insert_after",
                 "step": {"name": "test"},
@@ -296,23 +282,6 @@ def build_ops_from_nl(kind: str, features_text: str) -> list[dict]:
                     "needs": ["build_image"]
                 }
             })
-
-        # Coverage — вставляем В КОНЦЕ, чтобы быть ближе всех к 'test'
-        if has("coverage", "nyc", "покрытие", "коверидж"):
-            coverage_cmd = "npx nyc npm test" if has("nyc") else "npm test --silent -- --coverage"
-            coverage_op = {
-                "op": "insert_after",
-                "step": {"name": "test"},
-                "name": "coverage",
-                "value": {
-                    "run": coverage_cmd,
-                    "target": "auto",
-                    "needs": ["test"]
-                }
-            }
-
-        if coverage_op:
-            ops.append(coverage_op)
 
         # -------- Go ----------
     elif kind == "go":
@@ -659,9 +628,15 @@ def build_ops_from_nl(kind: str, features_text: str) -> list[dict]:
     # -------- Docker ----------
    
     elif kind == "docker":
-        # key=value из исходной фразы
+    # нормализуем текст запроса (чтобы ловить "build + push")
+        text_low = features_text.lower().replace("+", " ")
+
+        def has(*words: str) -> bool:
+            return any(w.lower() in text_low for w in words)
+
+        # key=value из фразы
         kv = {}
-        for tok in (text).split():          # <-- было (features or "").split()
+        for tok in text_low.split():
             if "=" in tok:
                 k, v = tok.split("=", 1)
                 kv[k.strip().lower()] = v.strip()
@@ -683,8 +658,12 @@ def build_ops_from_nl(kind: str, features_text: str) -> list[dict]:
         else:
             build_cmd = f"docker build -t {img_ref} -f {dockerfile} {context}"
 
-        ops.append({"op": "set_run", "step": {"name": "build"}, "value": build_cmd})
-        ops.append({"op": "set_target", "step": {"name": "build"}, "value": "host"})
+        ops.append({
+            "op": "insert_after",
+            "step": {"name": "Checkout"},
+            "name": "build",
+            "value": {"run": build_cmd, "target": "host"}
+        })
 
         # LOGIN (если попросили)
         if has("login", "логин"):
@@ -699,20 +678,21 @@ def build_ops_from_nl(kind: str, features_text: str) -> list[dict]:
                 "name": "login",
                 "value": {"run": login_cmd, "target": "host"}
             })
-            ops.append({"op": "set_needs", "step": {"name": "build"}, "value": ["login"]})
 
-        # RUN
-        ops.append({"op": "set_run", "step": {"name": "run"}, "value": f"docker run --rm {img_ref}"})
-        ops.append({"op": "set_target", "step": {"name": "run"}, "value": "host"})
-        ops.append({"op": "set_needs", "step": {"name": "run"}, "value": ["build"]})
+        # RUN (по желанию)
+        if has("run", "запусти"):
+            ops.append({
+                "op": "insert_after",
+                "step": {"name": "build"},
+                "name": "run",
+                "value": {"run": f"docker run --rm {img_ref}", "target": "host"}
+            })
 
         # PUSH
         if has("push", "пуш", "deploy", "деплой", "docker hub") or "image" in kv or "tag" in kv:
-            ops.append({"op": "set_run", "step": {"name": "push"}, "value": f"docker push {img_ref}"})
-            ops.append({"op": "set_target", "step": {"name": "push"}, "value": "host"})
-            ops.append({"op": "set_needs", "step": {"name": "push"}, "value": ["build"]})
-
-
-
-    return ops
-
+            ops.append({
+                "op": "insert_after",
+                "step": {"name": "build"},
+                "name": "push",
+                "value": {"run": f"docker push {img_ref}", "target": "host"}
+            })

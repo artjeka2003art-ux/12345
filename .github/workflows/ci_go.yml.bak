@@ -1,24 +1,23 @@
-name: CI (Python)
+name: CI (Go)
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
     - name: lint
-      run: black --check .
+      run: golangci-lint run
     - name: Checkout
       uses: actions/checkout@v4
-    - name: Set up Python
-      uses: actions/setup-python@v5
+    - name: Set up Go
+      uses: actions/setup-go@v5
       with:
-        python-version: '3.11'
+        go-version: '1.22'
     - name: Install dependencies
-      run: 'python -m pip install --upgrade pip
-
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi'
+      run: go mod tidy
     - name: Run tests
-      run: pytest -q || true
+      run: go test ./...
     - name: coverage
-      run: coverage run -m pytest && coverage report
+      run: go test -coverprofile=coverage.out ./... && go tool cover -func=coverage.out
+        && go tool cover -html=coverage.out -o coverage.html
     - name: build_image
       run: docker build -t myapp:latest .
     - name: push_image
