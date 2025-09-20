@@ -1,26 +1,32 @@
 name: CI (Go)
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch: {}
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.22"
-
-      - name: Install dependencies
-        run: go mod tidy
-
-      - name: Run tests
-        run: go test ./...
+    - name: lint
+      run: golangci-lint run
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+    - name: Install dependencies
+      run: go mod tidy
+    - name: Run tests
+      run: go test ./...
+    - name: coverage
+      run: go test -coverprofile=coverage.out ./... && go tool cover -func=coverage.out
+        && go tool cover -html=coverage.out -o coverage.html
+    - name: build_image
+      run: docker build -t myapp:latest .
+    - name: push_image
+      run: docker push myapp:latest
+'on':
+  push:
+    branches:
+    - main
+  pull_request:
+    branches:
+    - main
+  workflow_dispatch: {}
